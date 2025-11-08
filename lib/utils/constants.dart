@@ -20,6 +20,17 @@ class ApiConstants {
   static String sectionDetailsEndpoint(int id) => '/api/sections/$id';
   static String sectionStudentsEndpoint(int id) => '/api/sections/$id/active-students';
   
+  // Attendance endpoints
+  static const String attendanceEndpoint = '/api/attendance';
+  static String attendanceByIdEndpoint(int id) => '/api/attendance/$id';
+  static String attendanceByStudentEndpoint(int studentId) => '/api/attendance/student/$studentId';
+  static String attendanceBySessionEndpoint(int sessionId) => '/api/attendance/session/$sessionId';
+  static const String attendanceSummaryEndpoint = '/api/attendance/summary';
+  
+  // Session endpoints
+  static const String sessionsEndpoint = '/api/sessions';
+  static String sessionByIdEndpoint(int id) => '/api/sessions/$id';
+  
   // Timeout durations
   static const Duration connectionTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);

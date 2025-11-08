@@ -644,4 +644,595 @@ class ApiService {
       };
     }
   }
+
+  // ==================== ATTENDANCE METHODS ====================
+
+  /// Get attendance records with optional filters
+  Future<Map<String, dynamic>> getAttendance({
+    int? studentId,
+    int? sessionId,
+    int? scheduleId,
+    int? sectionId,
+    int? subjectId,
+    String? status,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool? isManualEntry,
+    int? pageNumber,
+    int? pageSize,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}').replace(
+        queryParameters: {
+          if (studentId != null) 'StudentId': studentId.toString(),
+          if (sessionId != null) 'SessionId': sessionId.toString(),
+          if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
+          if (sectionId != null) 'SectionId': sectionId.toString(),
+          if (subjectId != null) 'SubjectId': subjectId.toString(),
+          if (status != null) 'Status': status,
+          if (startDate != null) 'StartDate': startDate.toIso8601String(),
+          if (endDate != null) 'EndDate': endDate.toIso8601String(),
+          if (isManualEntry != null) 'IsManualEntry': isManualEntry.toString(),
+          if (pageNumber != null) 'PageNumber': pageNumber.toString(),
+          if (pageSize != null) 'PageSize': pageSize.toString(),
+        },
+      );
+
+      print('🌐 Fetching attendance from: $uri');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      print('📊 Attendance Response Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getAttendance: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Get attendance by session ID
+  Future<Map<String, dynamic>> getAttendanceBySession(int sessionId, {String? requestId}) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceBySessionEndpoint(sessionId)}';
+      print('🌐 Fetching attendance by session from: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      print('📊 Session Attendance Response Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load session attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getAttendanceBySession: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Get attendance by student ID
+  Future<Map<String, dynamic>> getAttendanceByStudent(int studentId, {String? requestId}) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByStudentEndpoint(studentId)}';
+      print('🌐 Fetching attendance by student from: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load student attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getAttendanceByStudent: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Get attendance by ID
+  Future<Map<String, dynamic>> getAttendanceById(int id, {String? requestId}) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
+      print('🌐 Fetching attendance by ID from: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getAttendanceById: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Create attendance record
+  Future<Map<String, dynamic>> createAttendance({
+    required int studentId,
+    required int sessionId,
+    String? status,
+    DateTime? checkInTime,
+    String? notes,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}';
+      print('🌐 Creating attendance at: $url');
+
+      final body = {
+        'studentId': studentId,
+        'sessionId': sessionId,
+        if (status != null) 'status': status,
+        if (checkInTime != null) 'checkInTime': checkInTime.toIso8601String(),
+        if (notes != null) 'notes': notes,
+      };
+
+      final response = await _makeRequest(
+        method: 'POST',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode(body),
+        requestId: requestId,
+      );
+
+      print('📊 Create Attendance Response Status: ${response.statusCode}');
+      print('📝 Create Attendance Response Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        final errorBody = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': false,
+          'error': errorBody['message'] ?? 'Failed to create attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in createAttendance: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Update attendance record
+  Future<Map<String, dynamic>> updateAttendance({
+    required int id,
+    String? status,
+    String? notes,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
+      print('🌐 Updating attendance at: $url');
+
+      final body = <String, dynamic>{};
+      if (status != null) body['status'] = status;
+      if (notes != null) body['notes'] = notes;
+
+      final response = await _makeRequest(
+        method: 'PUT',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode(body),
+        requestId: requestId,
+      );
+
+      print('📊 Update Attendance Response Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        final errorBody = response.body.isNotEmpty ? json.decode(response.body) : {};
+        return {
+          'success': false,
+          'error': errorBody['message'] ?? 'Failed to update attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in updateAttendance: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Delete attendance record
+  Future<Map<String, dynamic>> deleteAttendance(int id, {String? requestId}) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
+      print('🌐 Deleting attendance at: $url');
+
+      final response = await _makeRequest(
+        method: 'DELETE',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return {
+          'success': true,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to delete attendance: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in deleteAttendance: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Get attendance summary
+  Future<Map<String, dynamic>> getAttendanceSummary({
+    int? studentId,
+    int? sessionId,
+    int? scheduleId,
+    int? sectionId,
+    int? subjectId,
+    String? status,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool? isManualEntry,
+    int? pageNumber,
+    int? pageSize,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceSummaryEndpoint}').replace(
+        queryParameters: {
+          if (studentId != null) 'StudentId': studentId.toString(),
+          if (sessionId != null) 'SessionId': sessionId.toString(),
+          if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
+          if (sectionId != null) 'SectionId': sectionId.toString(),
+          if (subjectId != null) 'SubjectId': subjectId.toString(),
+          if (status != null) 'Status': status,
+          if (startDate != null) 'StartDate': startDate.toIso8601String(),
+          if (endDate != null) 'EndDate': endDate.toIso8601String(),
+          if (isManualEntry != null) 'IsManualEntry': isManualEntry.toString(),
+          if (pageNumber != null) 'PageNumber': pageNumber.toString(),
+          if (pageSize != null) 'PageSize': pageSize.toString(),
+        },
+      );
+
+      print('🌐 Fetching attendance summary from: $uri');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load attendance summary: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getAttendanceSummary: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
+
+  /// Get sessions (to list available sessions for attendance)
+  Future<Map<String, dynamic>> getSessions({
+    int? scheduleId,
+    DateTime? startDate,
+    DateTime? endDate,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.sessionsEndpoint}').replace(
+        queryParameters: {
+          if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
+          if (startDate != null) 'StartDate': startDate.toIso8601String(),
+          if (endDate != null) 'EndDate': endDate.toIso8601String(),
+        },
+      );
+
+      print('🌐 Fetching sessions from: $uri');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'data': data,
+        };
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load sessions: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getSessions: $e');
+      return {
+        'success': false,
+        'error': e.toString().contains('timeout')
+            ? 'Connection timeout. Please check your internet.'
+            : 'Error: $e',
+      };
+    }
+  }
 }
