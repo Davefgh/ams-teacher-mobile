@@ -17,6 +17,9 @@ class ApiService {
   // Map to store cancellable requests
   final Map<String, http.Client> _activeRequests = {};
   
+  // Future for coordinating concurrent token refresh attempts
+  Future<bool>? _refreshFuture;
+  
   // Generate unique request ID
   String _generateRequestId() => DateTime.now().millisecondsSinceEpoch.toString();
 
@@ -34,13 +37,14 @@ class ApiService {
     _activeRequests.clear();
   }
 
-  // Helper method to make cancellable HTTP requests
+  // Helper method to make cancellable HTTP requests with automatic token refresh
   Future<http.Response> _makeRequest({
     required String method,
     required Uri uri,
     Map<String, String>? headers,
     Object? body,
     String? requestId,
+    bool retryOn401 = true, // Flag to prevent infinite refresh loops
   }) async {
     final client = http.Client();
     final reqId = requestId ?? _generateRequestId();
@@ -82,10 +86,131 @@ class ApiService {
         default:
           throw Exception('Unsupported HTTP method: $method');
       }
+
+      // If we get a 401 and retry is enabled, try to refresh token and retry
+      if (response.statusCode == 401 && retryOn401) {
+        print('🔄 Token expired (401), attempting to refresh...');
+        
+        final refreshSuccess = await _attemptTokenRefresh();
+        
+        if (refreshSuccess) {
+          // Get new token and retry the request with updated headers
+          final newToken = await StorageService.getToken();
+          if (newToken != null) {
+            // Update headers with new token
+            final updatedHeaders = Map<String, String>.from(headers ?? {});
+            updatedHeaders['Authorization'] = 'Bearer $newToken';
+            
+            print('✅ Token refreshed, retrying request...');
+            
+            // Retry the request (with retryOn401 = false to prevent infinite loop)
+            return await _makeRequest(
+              method: method,
+              uri: uri,
+              headers: updatedHeaders,
+              body: body,
+              requestId: requestId,
+              retryOn401: false,
+            );
+          }
+        } else {
+          print('❌ Token refresh failed, returning 401 response');
+        }
+      }
+
       return response;
     } finally {
       _activeRequests.remove(reqId);
       client.close();
+    }
+  }
+
+  // Attempt to refresh the access token
+  // Uses a shared Future to coordinate concurrent refresh attempts
+  Future<bool> _attemptTokenRefresh() async {
+    // If a refresh is already in progress, wait for it to complete
+    if (_refreshFuture != null) {
+      print('⏳ Token refresh already in progress, waiting...');
+      try {
+        return await _refreshFuture!;
+      } catch (e) {
+        print('❌ Error waiting for token refresh: $e');
+        return false;
+      }
+    }
+
+    // Start a new refresh attempt
+    final refreshCompleter = _performTokenRefresh();
+    _refreshFuture = refreshCompleter;
+    
+    try {
+      final result = await refreshCompleter;
+      return result;
+    } finally {
+      // Only clear if this is still the current refresh attempt
+      // This prevents race conditions with concurrent requests
+      if (_refreshFuture == refreshCompleter) {
+        _refreshFuture = null;
+      }
+    }
+  }
+
+  // Perform the actual token refresh
+  Future<bool> _performTokenRefresh() async {
+    try {
+      final refreshToken = await StorageService.getRefreshToken();
+      final oldAccessToken = await StorageService.getAccessToken();
+
+      if (refreshToken == null || refreshToken.isEmpty) {
+        print('❌ No refresh token available');
+        return false;
+      }
+
+      print('🔄 Refreshing token...');
+      
+      final client = http.Client();
+      try {
+        final response = await client.post(
+          Uri.parse('${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'refreshToken': refreshToken,
+            if (oldAccessToken != null) 'oldAccessToken': oldAccessToken,
+          }),
+        ).timeout(
+          ApiConstants.connectionTimeout,
+          onTimeout: () => throw TimeoutException('Token refresh timeout'),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          
+          if (data['success'] == true && data['accessToken'] != null) {
+            final newAccessToken = data['accessToken'] as String;
+            final newRefreshToken = data['refreshToken'] as String? ?? refreshToken;
+            
+            // Save new tokens
+            await StorageService.saveTokens(newAccessToken, newRefreshToken);
+            
+            print('✅ Token refreshed successfully');
+            return true;
+          } else {
+            print('❌ Token refresh failed: ${data['message'] ?? 'Unknown error'}');
+            return false;
+          }
+        } else {
+          print('❌ Token refresh failed with status: ${response.statusCode}');
+          return false;
+        }
+      } finally {
+        client.close();
+      }
+    } catch (e) {
+      print('❌ Error during token refresh: $e');
+      return false;
     }
   }
   
@@ -105,6 +230,7 @@ class ApiService {
           'password': password,
         }),
         requestId: requestId,
+        retryOn401: false, // Don't retry on login endpoint (401 means invalid credentials)
       );
 
       print('Login Status Code: ${response.statusCode}');
@@ -142,6 +268,7 @@ class ApiService {
           'password': password,
         }),
         requestId: requestId,
+        retryOn401: false, // Don't retry on register endpoint
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -155,8 +282,11 @@ class ApiService {
     }
   }
 
+  /// Manually refresh token (for explicit refresh requests)
   Future<Map<String, dynamic>> refreshToken(String refreshToken, {String? requestId}) async {
     try {
+      final oldAccessToken = await StorageService.getAccessToken();
+      
       final response = await _makeRequest(
         method: 'POST',
         uri: Uri.parse('${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}'),
@@ -166,14 +296,26 @@ class ApiService {
         },
         body: jsonEncode({
           'refreshToken': refreshToken,
+          if (oldAccessToken != null) 'oldAccessToken': oldAccessToken,
         }),
         requestId: requestId,
+        retryOn401: false, // Don't retry refresh endpoint
       );
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        
+        if (data['success'] == true && data['accessToken'] != null) {
+          final newAccessToken = data['accessToken'] as String;
+          final newRefreshToken = data['refreshToken'] as String? ?? refreshToken;
+          
+          // Save new tokens
+          await StorageService.saveTokens(newAccessToken, newRefreshToken);
+        }
+        
+        return data;
       } else {
-        throw Exception('Token refresh failed');
+        throw Exception('Token refresh failed: ${response.statusCode}');
       }
     } catch (e) {
       throw Exception('Network error: $e');
