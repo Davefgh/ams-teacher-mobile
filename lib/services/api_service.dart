@@ -1,7 +1,9 @@
 // lib/services/api_service.dart
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import '../utils/constants.dart';
 import 'storage_service.dart';
 
@@ -22,6 +24,19 @@ class ApiService {
   
   // Generate unique request ID
   String _generateRequestId() => DateTime.now().millisecondsSinceEpoch.toString();
+
+  // Create HTTP client that accepts self-signed certificates (for development)
+  http.Client _createHttpClient() {
+    final httpClient = HttpClient();
+    // Allow self-signed certificates for local development
+    httpClient.badCertificateCallback = (X509Certificate cert, String host, int port) {
+      // For local development, accept all certificates
+      // In production, you should validate certificates properly
+      print('⚠️ Accepting self-signed certificate for $host:$port');
+      return true;
+    };
+    return IOClient(httpClient);
+  }
 
   // Cancel a request by ID
   void cancelRequest(String requestId) {
@@ -46,7 +61,8 @@ class ApiService {
     String? requestId,
     bool retryOn401 = true, // Flag to prevent infinite refresh loops
   }) async {
-    final client = http.Client();
+    // Use custom client that accepts self-signed certificates for HTTPS
+    final client = _createHttpClient();
     final reqId = requestId ?? _generateRequestId();
     _activeRequests[reqId] = client;
 
@@ -168,7 +184,7 @@ class ApiService {
 
       print('🔄 Refreshing token...');
       
-      final client = http.Client();
+      final client = _createHttpClient();
       try {
         final response = await client.post(
           Uri.parse('${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}'),
@@ -244,6 +260,7 @@ class ApiService {
       }
     } catch (e) {
       print('Login error: $e');
+      print('Login URL attempted: ${ApiConstants.baseUrl}${ApiConstants.loginEndpoint}');
       rethrow;
     }
   }

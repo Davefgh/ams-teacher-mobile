@@ -809,8 +809,10 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         ),
         elevation: 8,
         child: Container(
-          padding: const EdgeInsets.all(24),
-          width: MediaQuery.of(context).size.width * 0.9,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.9,
+            maxWidth: MediaQuery.of(context).size.width * 0.9,
+          ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
             gradient: const LinearGradient(
@@ -822,116 +824,131 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Text(
-                    'QR Code',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // QR Code
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey[300]!),
-                ),
-                child: QrImageView(
-                  data: _generateQrData(),
-                  version: QrVersions.auto,
-                  size: 250,
-                  backgroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Session Details
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // Header (Fixed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    _buildQrDetailRow('Subject', widget.subject),
-                    const SizedBox(height: 8),
-                    _buildQrDetailRow('Room', _currentRoom),
-                    const SizedBox(height: 8),
-                    _buildQrDetailRow('Schedule', widget.scheduleTime),
-                    const SizedBox(height: 8),
-                    _buildQrDetailRow('Instructor', _instructorName),
-                    const SizedBox(height: 8),
-                    _buildQrDetailRow(
-                      'Start Time',
-                      _sessionStartTime?.toString().substring(0, 16) ?? DateTime.now().toString().substring(0, 16),
+                    const Text(
+                      'QR Code',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              // Edit Room Button
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    _showEditRoomModal(context);
-                  },
-                  icon: const Icon(Icons.edit, size: 20),
-                  label: const Text(
-                    'Edit Room',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white, width: 2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Close Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1E3A8A),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Close',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+              // Scrollable Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // QR Code
+                      Container(
+                        padding: const EdgeInsets.all(16), // Reduced from 20
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey[300]!),
+                        ),
+                        child: QrImageView(
+                          data: _generateQrData(),
+                          version: QrVersions.auto,
+                          size: 220, // Reduced from 250
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 16), // Reduced from 20
+                      // Session Details
+                      Container(
+                        padding: const EdgeInsets.all(14), // Reduced from 16
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildQrDetailRow('Subject', widget.subject),
+                            const SizedBox(height: 6), // Reduced from 8
+                            _buildQrDetailRow('Room', _currentRoom),
+                            const SizedBox(height: 6), // Reduced from 8
+                            _buildQrDetailRow('Schedule', widget.scheduleTime),
+                            const SizedBox(height: 6), // Reduced from 8
+                            _buildQrDetailRow('Instructor', _instructorName),
+                            const SizedBox(height: 6), // Reduced from 8
+                            _buildQrDetailRow(
+                              'Start Time',
+                              _sessionStartTime?.toString().substring(0, 16) ?? DateTime.now().toString().substring(0, 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16), // Reduced from 20
+                      // Edit Room Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _showEditRoomModal(context);
+                          },
+                          icon: const Icon(Icons.edit, size: 18), // Reduced from 20
+                          label: const Text(
+                            'Edit Room',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white, width: 2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 10), // Reduced from 12
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16), // Reduced from 20
+                      // Close Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF1E3A8A),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12), // Reduced from 14
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Close',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24), // Bottom padding for scroll
+                    ],
                   ),
                 ),
               ),

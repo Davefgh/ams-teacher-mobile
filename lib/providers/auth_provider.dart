@@ -96,9 +96,52 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
       }
     } catch (e) {
+      String errorMsg = 'Unable to connect to server.';
+      
+      // Provide more specific error messages
+      final errorString = e.toString();
+      print('🔴 Login error details: $errorString');
+      
+      if (errorString.contains('timeout') || errorString.contains('TimeoutException')) {
+        errorMsg = 'Connection timeout.\n\n'
+            'Please check:\n'
+            '• Backend server is running\n'
+            '• IP: 192.168.254.106:8081\n'
+            '• Both devices on same WiFi\n'
+            '• Windows Firewall allows port 8081';
+      } else if (errorString.contains('Failed host lookup') || 
+                 errorString.contains('SocketException') ||
+                 errorString.contains('Network is unreachable')) {
+        errorMsg = 'Cannot reach server.\n\n'
+            'Please check:\n'
+            '• Backend is running on port 8081\n'
+            '• Backend listens on 0.0.0.0 (not localhost)\n'
+            '• Windows Firewall allows port 8081\n'
+            '• Both devices on same WiFi network\n'
+            '• Try: http://192.168.254.106:8081 in phone browser';
+      } else if (errorString.contains('Certificate') || errorString.contains('TLS')) {
+        errorMsg = 'SSL/Certificate error.\n\n'
+            'Using HTTP instead of HTTPS.\n'
+            'If backend requires HTTPS, update constants.dart';
+      } else if (errorString.contains('Connection closed before full header')) {
+        errorMsg = 'Connection closed by server.\n\n'
+            'This usually means:\n'
+            '• Backend expects HTTPS (not HTTP)\n'
+            '• Backend rejects HTTP connections\n'
+            '• Protocol mismatch\n\n'
+            'Try:\n'
+            '1. Check if backend uses HTTPS\n'
+            '2. Test: http://192.168.254.106:8081 in phone browser\n'
+            '3. Check backend logs for rejection reason';
+      } else {
+        errorMsg = 'Connection error:\n${errorString}\n\n'
+            'Server: http://192.168.254.106:8081\n'
+            'Check backend is running and accessible.';
+      }
+      
       state = state.copyWith(
         isLoading: false,
-        error: 'Unable to connect to server. Please check your internet connection.',
+        error: errorMsg,
       );
     }
   }

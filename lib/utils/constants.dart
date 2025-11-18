@@ -1,13 +1,19 @@
 // lib/utils/constants.dart
 class ApiConstants {
-  // OPTION 1: Try HTTPS first (matches what Scalar is using)
-  static const String baseUrl = 'https://localhost:8081';
+  // IMPORTANT: For physical device on same WiFi network, use your computer's local IP address
+  // Find your IP: 
+  //   Windows: ipconfig (look for IPv4 Address)
+  //   Mac/Linux: ifconfig or ip addr (look for inet)
+  //   Example: http://192.168.1.100:8081
   
-  // OPTION 2: If HTTPS doesn't work, try HTTP on port 5142
-  // static const String baseUrl = 'http://localhost:5142';
+  // OPTION 1: For Physical Device on Same WiFi with HTTPS (Your backend uses HTTPS!)
+  static const String baseUrl = 'https://192.168.254.106:8081'; // ✅ HTTPS - Your computer's IP address
   
-  // OPTION 3: For Physical Device (update IP if needed)
-  // static const String baseUrl = 'http://192.168.254.106:5142';
+  // OPTION 2: For Physical Device with HTTP (if backend doesn't use HTTPS)
+  // static const String baseUrl = 'http://192.168.254.106:8081';
+  
+  // OPTION 3: For Emulator/Simulator (localhost works)
+  // static const String baseUrl = 'http://localhost:8081';
   
   // Auth endpoints
   static const String loginEndpoint = '/api/account/login';

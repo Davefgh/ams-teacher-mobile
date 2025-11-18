@@ -59,9 +59,29 @@ class LoginNotifier extends StateNotifier<LoginState> {
         state = state.copyWith(isLoading: false);
       }
     } catch (e) {
+      String errorMsg = 'Unable to connect to server.';
+      
+      // Provide more specific error messages
+      if (e.toString().contains('timeout') || e.toString().contains('TimeoutException')) {
+        errorMsg = 'Connection timeout. Please check:\n'
+            '1. Backend server is running\n'
+            '2. Correct IP address: 192.168.254.106\n'
+            '3. Correct port: 8081\n'
+            '4. Both devices on same WiFi';
+      } else if (e.toString().contains('Failed host lookup') || e.toString().contains('SocketException')) {
+        errorMsg = 'Cannot reach server at 192.168.254.106:8081\n'
+            'Please check:\n'
+            '1. Backend is running\n'
+            '2. Backend listens on 0.0.0.0 (not just localhost)\n'
+            '3. Windows Firewall allows port 8081\n'
+            '4. Both devices on same WiFi network';
+      } else {
+        errorMsg = 'Error: ${e.toString()}';
+      }
+      
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Unable to connect to server. Please check your internet connection.',
+        errorMessage: errorMsg,
       );
     }
   }

@@ -369,14 +369,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const SizedBox(height: 16),
                         
-                        // 3 Cards Grid
+                        // Overview Cards Grid
                         GridView.count(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 1.5,
+                          childAspectRatio: 1.3, // Increased from 1.5 to give more vertical space
                           children: [
                             _buildOverviewCard(
                               'Sections',
@@ -577,7 +577,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildOverviewCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14), // Reduced from 16 to 14
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -590,7 +590,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min, // Prevent overflow
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween, // Distribute space evenly
         children: [
           Container(
             padding: const EdgeInsets.all(6),
@@ -601,29 +603,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Icon(
               icon,
               color: Colors.black,
-              size: 20,
+              size: 18, // Reduced from 20 to 18
             ),
           ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-                fontSize: 22,
+          Flexible(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    fontSize: 20, // Reduced from 22 to 20
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 2),
           Center(
             child: Text(
               title,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.black,
                 fontWeight: FontWeight.w500,
-                fontSize: 12,
+                fontSize: 11, // Reduced from 12 to 11
               ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

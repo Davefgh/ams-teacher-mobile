@@ -332,7 +332,14 @@ class _SectionsScreenState extends State<SectionsScreen> {
                   // Subjects List
                   if (isExpanded) ...[
                     const Divider(height: 1),
-                    ...sections.map((section) => _buildSectionCard(context, section)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 10, desktop: 12),
+                      ),
+                      child: Column(
+                        children: sections.map((section) => _buildSectionCard(context, section)).toList(),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -351,7 +358,7 @@ class _SectionsScreenState extends State<SectionsScreen> {
     return Container(
       margin: EdgeInsets.symmetric(
         horizontal: ResponsiveUtils.getResponsiveSpacing(context, mobile: 12, tablet: 16, desktop: 20),
-        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 2, tablet: 4, desktop: 6),
+        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 6, tablet: 8, desktop: 10),
       ),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
