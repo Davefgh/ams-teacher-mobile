@@ -7,7 +7,7 @@ import '../services/api_service.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final int? sessionId; // Optional session ID passed from other screens
-  
+
   const AttendanceScreen({super.key, this.sessionId});
 
   @override
@@ -20,13 +20,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool isLoading = false;
   bool isLoadingSessions = false;
   String? errorMessage;
-  
+
   // Session and attendance data
   int? _selectedSessionId;
   Map<String, dynamic>? _sessionData;
   List<Map<String, dynamic>> _attendanceRecords = [];
   List<Map<String, dynamic>> _sessions = [];
-  
+
   @override
   void initState() {
     super.initState();
@@ -83,20 +83,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     try {
       // Load attendance by session
-      final attendanceResult = await _apiService.getAttendanceBySession(_selectedSessionId!);
-      
+      final attendanceResult = await _apiService.getAttendanceBySession(
+        _selectedSessionId!,
+      );
+
       if (attendanceResult['success'] == true) {
         final data = attendanceResult['data'];
         setState(() {
           _sessionData = data;
           _attendanceRecords = List<Map<String, dynamic>>.from(
-            data['attendanceRecords'] ?? []
+            data['attendanceRecords'] ?? [],
           );
         });
-        
       } else {
         setState(() {
-          errorMessage = attendanceResult['error'] ?? 'Failed to load attendance';
+          errorMessage =
+              attendanceResult['error'] ?? 'Failed to load attendance';
         });
       }
     } catch (e) {
@@ -110,7 +112,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  Future<void> _updateAttendanceStatus(int attendanceId, String newStatus) async {
+  Future<void> _updateAttendanceStatus(
+    int attendanceId,
+    String newStatus,
+  ) async {
     setState(() {
       isLoading = true;
     });
@@ -170,27 +175,31 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   int get presentCount {
-    return _attendanceRecords.where((r) => 
-      (r['status']?.toString().toLowerCase() ?? '') == 'present'
-    ).length;
+    return _attendanceRecords
+        .where(
+          (r) => (r['status']?.toString().toLowerCase() ?? '') == 'present',
+        )
+        .length;
   }
 
   int get absentCount {
-    return _attendanceRecords.where((r) => 
-      (r['status']?.toString().toLowerCase() ?? '') == 'absent'
-    ).length;
+    return _attendanceRecords
+        .where((r) => (r['status']?.toString().toLowerCase() ?? '') == 'absent')
+        .length;
   }
 
   int get lateCount {
-    return _attendanceRecords.where((r) => 
-      (r['status']?.toString().toLowerCase() ?? '') == 'late'
-    ).length;
+    return _attendanceRecords
+        .where((r) => (r['status']?.toString().toLowerCase() ?? '') == 'late')
+        .length;
   }
 
   int get excusedCount {
-    return _attendanceRecords.where((r) => 
-      (r['status']?.toString().toLowerCase() ?? '') == 'excused'
-    ).length;
+    return _attendanceRecords
+        .where(
+          (r) => (r['status']?.toString().toLowerCase() ?? '') == 'excused',
+        )
+        .length;
   }
 
   String _formatDateTime(String? dateTimeString) {
@@ -211,8 +220,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (dateTimeString == null || dateTimeString.isEmpty) return '--';
     try {
       final dateTime = DateTime.parse(dateTimeString);
-      final monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-          'July', 'August', 'September', 'October', 'November', 'December'];
+      final monthNames = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
       return '${monthNames[dateTime.month - 1]} ${dateTime.day}, ${dateTime.year}';
     } catch (e) {
       return '--';
@@ -243,12 +264,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    // Back Button
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 12),
                     // ACLC Logo
                     Image.asset(
                       'lib/images/aclc_logo.png',
@@ -268,17 +283,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         ),
                       ),
                     ),
-                    // Refresh Button
-                    IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.white),
-                      onPressed: () {
-                        _loadAttendanceData();
-                      },
-                    ),
                   ],
                 ),
               ),
-              
+
               // Main Content
               Expanded(
                 child: Container(
@@ -292,310 +300,352 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   child: isLoadingSessions
                       ? const Center(child: CircularProgressIndicator())
                       : errorMessage != null && _sessions.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    errorMessage!,
-                                    style: TextStyle(color: Colors.grey[600]),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  ElevatedButton(
-                                    onPressed: _loadSessions,
-                                    child: const Text('Retry'),
-                                  ),
-                                ],
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 64,
+                                color: Colors.grey[400],
                               ),
-                            )
-                          : _selectedSessionId == null
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.calendar_today, size: 64, color: Colors.grey[400]),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        'No session selected',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Please select a session to view attendance',
-                                        style: TextStyle(color: Colors.grey[600]),
-                                      ),
-                                    ],
+                              const SizedBox(height: 16),
+                              Text(
+                                errorMessage!,
+                                style: TextStyle(color: Colors.grey[600]),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _loadSessions,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _selectedSessionId == null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No session selected',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Please select a session to view attendance',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Session Selection
+                              if (_sessions.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey[300]!,
+                                    ),
                                   ),
-                                )
-                              : SingleChildScrollView(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                  child: Row(
                                     children: [
-                                      // Session Selection
-                                      if (_sessions.isNotEmpty) ...[
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: Colors.grey[300]!),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Icon(Icons.calendar_today_rounded, 
-                                                color: Color(0xFF1E3A8A), size: 24),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    const Text(
-                                                      'Session',
-                                                      style: TextStyle(
-                                                        fontSize: 14,
-                                                        color: Colors.grey,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    DropdownButton<int>(
-                                                      value: _selectedSessionId,
-                                                      isExpanded: true,
-                                                      underline: const SizedBox(),
-                                                      items: _sessions.map((session) {
-                                                        final sessionDate = _formatDate(
-                                                          session['sessionDate']?.toString()
-                                                        );
-                                                        final subjectName = session['subjectName']?.toString() ?? 
-                                                          session['scheduleTitle']?.toString() ?? 'Unknown';
-                                                        return DropdownMenuItem<int>(
-                                                          value: session['id'],
-                                                          child: Text(
-                                                            '$subjectName - $sessionDate',
-                                                            style: const TextStyle(
-                                                              fontWeight: FontWeight.bold,
-                                                              color: Colors.black87,
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }).toList(),
-                                                      onChanged: (value) {
-                                                        setState(() {
-                                                          _selectedSessionId = value;
-                                                        });
-                                                        _loadAttendanceData();
-                                                      },
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                      ],
-
-                                      // Session Info
-                                      if (_sessionData != null) ...[
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: Colors.grey[300]!),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                _sessionData!['subjectName']?.toString() ?? 
-                                                  _sessionData!['scheduleTitle']?.toString() ?? 'Unknown Subject',
-                                                style: const TextStyle(
-                                                  fontSize: 20,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF1E3A8A),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              if (_sessionData!['sectionName'] != null)
-                                                Text(
-                                                  'Section: ${_sessionData!['sectionName']}',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.grey[600],
-                                                  ),
-                                                ),
-                                              if (_sessionData!['sessionDate'] != null) ...[
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  'Date: ${_formatDate(_sessionData!['sessionDate']?.toString())}',
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    color: Colors.grey[600],
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                      ],
-
-                                      // Status Cards
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: _buildStatusCard(
-                                              'Present',
-                                              presentCount.toString(),
-                                              Icons.check_circle,
-                                              const Color(0xFF10B981),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: _buildStatusCard(
-                                              'Late',
-                                              lateCount.toString(),
-                                              Icons.schedule,
-                                              const Color(0xFFF59E0B),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: _buildStatusCard(
-                                              'Absent',
-                                              absentCount.toString(),
-                                              Icons.cancel,
-                                              const Color(0xFFEF4444),
-                                            ),
-                                          ),
-                                        ],
+                                      const Icon(
+                                        Icons.calendar_today_rounded,
+                                        color: Color(0xFF1E3A8A),
+                                        size: 24,
                                       ),
-                                      
-                                      if (excusedCount > 0) ...[
-                                        const SizedBox(height: 12),
-                                        Row(
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Expanded(
-                                              child: _buildStatusCard(
-                                                'Excused',
-                                                excusedCount.toString(),
-                                                Icons.info,
-                                                const Color(0xFF6366F1),
+                                            const Text(
+                                              'Session',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey,
                                               ),
                                             ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Container(), // Empty space
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Container(), // Empty space
+                                            const SizedBox(height: 4),
+                                            DropdownButton<int>(
+                                              value: _selectedSessionId,
+                                              isExpanded: true,
+                                              underline: const SizedBox(),
+                                              items: _sessions.map((session) {
+                                                final sessionDate = _formatDate(
+                                                  session['sessionDate']
+                                                      ?.toString(),
+                                                );
+                                                final subjectName =
+                                                    session['subjectName']
+                                                        ?.toString() ??
+                                                    session['scheduleTitle']
+                                                        ?.toString() ??
+                                                    'Unknown';
+                                                return DropdownMenuItem<int>(
+                                                  value: session['id'],
+                                                  child: Text(
+                                                    '$subjectName - $sessionDate',
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.black87,
+                                                    ),
+                                                  ),
+                                                );
+                                              }).toList(),
+                                              onChanged: (value) {
+                                                setState(() {
+                                                  _selectedSessionId = value;
+                                                });
+                                                _loadAttendanceData();
+                                              },
                                             ),
                                           ],
                                         ),
-                                      ],
-                                      
-                                      const SizedBox(height: 24),
-                                      
-                                      // Sort Section
-                                      Row(
-                                        children: [
-                                          Text(
-                                            'Attendance List',
-                                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                              color: const Color(0xFF1E3A8A),
-                                              fontSize: 20,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          IconButton(
-                                            onPressed: _showSortSheet,
-                                            icon: const Icon(
-                                              Icons.sort,
-                                              color: Color(0xFF1E3A8A),
-                                              size: 24,
-                                            ),
-                                            splashRadius: 22,
-                                          ),
-                                        ],
                                       ),
-                                      
-                                      const SizedBox(height: 20),
-                                      
-                                      // Loading indicator
-                                      if (isLoading && _attendanceRecords.isEmpty)
-                                        const Center(
-                                          child: Padding(
-                                            padding: EdgeInsets.all(32.0),
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        )
-                                      else if (errorMessage != null && _attendanceRecords.isEmpty)
-                                        Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(32.0),
-                                            child: Column(
-                                              children: [
-                                                Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  errorMessage!,
-                                                  style: TextStyle(color: Colors.grey[600]),
-                                                  textAlign: TextAlign.center,
-                                                ),
-                                                const SizedBox(height: 16),
-                                                ElevatedButton(
-                                                  onPressed: _loadAttendanceData,
-                                                  child: const Text('Retry'),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      else if (filteredAttendanceList.isEmpty)
-                                        Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(32.0),
-                                            child: Column(
-                                              children: [
-                                                Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  'No attendance records found',
-                                                  style: TextStyle(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.grey[600],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      else
-                                        // Attendance List
-                                        ListView.builder(
-                                          shrinkWrap: true,
-                                          physics: const NeverScrollableScrollPhysics(),
-                                          itemCount: filteredAttendanceList.length,
-                                          itemBuilder: (context, index) {
-                                            final record = filteredAttendanceList[index];
-                                            return _buildStudentCard(record);
-                                          },
-                                        ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(height: 20),
+                              ],
+
+                              // Session Info
+                              if (_sessionData != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.grey[300]!,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _sessionData!['subjectName']
+                                                ?.toString() ??
+                                            _sessionData!['scheduleTitle']
+                                                ?.toString() ??
+                                            'Unknown Subject',
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF1E3A8A),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      if (_sessionData!['sectionName'] != null)
+                                        Text(
+                                          'Section: ${_sessionData!['sectionName']}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      if (_sessionData!['sessionDate'] !=
+                                          null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Date: ${_formatDate(_sessionData!['sessionDate']?.toString())}',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+
+                              // Status Cards
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatusCard(
+                                      'Present',
+                                      presentCount.toString(),
+                                      Icons.check_circle,
+                                      const Color(0xFF10B981),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildStatusCard(
+                                      'Late',
+                                      lateCount.toString(),
+                                      Icons.schedule,
+                                      const Color(0xFFF59E0B),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildStatusCard(
+                                      'Absent',
+                                      absentCount.toString(),
+                                      Icons.cancel,
+                                      const Color(0xFFEF4444),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              if (excusedCount > 0) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildStatusCard(
+                                        'Excused',
+                                        excusedCount.toString(),
+                                        Icons.info,
+                                        const Color(0xFF6366F1),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Container(), // Empty space
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Container(), // Empty space
+                                    ),
+                                  ],
+                                ),
+                              ],
+
+                              const SizedBox(height: 24),
+
+                              // Sort Section
+                              Row(
+                                children: [
+                                  Text(
+                                    'Attendance List',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineSmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: const Color(0xFF1E3A8A),
+                                          fontSize: 20,
+                                        ),
+                                  ),
+                                  const Spacer(),
+                                  IconButton(
+                                    onPressed: _showSortSheet,
+                                    icon: const Icon(
+                                      Icons.sort,
+                                      color: Color(0xFF1E3A8A),
+                                      size: 24,
+                                    ),
+                                    splashRadius: 22,
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              // Loading indicator
+                              if (isLoading && _attendanceRecords.isEmpty)
+                                const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(32.0),
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              else if (errorMessage != null &&
+                                  _attendanceRecords.isEmpty)
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(32.0),
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          Icons.error_outline,
+                                          size: 64,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          errorMessage!,
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        ElevatedButton(
+                                          onPressed: _loadAttendanceData,
+                                          child: const Text('Retry'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              else if (filteredAttendanceList.isEmpty)
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(32.0),
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          Icons.people_outline,
+                                          size: 64,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'No attendance records found',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              else
+                                // Attendance List
+                                ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: filteredAttendanceList.length,
+                                  itemBuilder: (context, index) {
+                                    final record =
+                                        filteredAttendanceList[index];
+                                    return _buildStudentCard(record);
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -621,51 +671,54 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           currentIndex: 1, // Attendance tab selected
           onTap: (index) {
             if (index == 0) {
-              Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const DashboardScreen()));
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => const DashboardScreen(),
+                ),
+              );
             } else if (index == 2) {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => QrScreen()));
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (context) => QrScreen()));
             } else if (index == 3) {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SectionsScreen()));
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const SectionsScreen()),
+              );
             } else if (index == 4) {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
             }
           },
           items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
             BottomNavigationBarItem(
               icon: Icon(Icons.assignment),
               label: 'Attendance',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code),
-              label: 'QR',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.qr_code), label: 'QR'),
             BottomNavigationBarItem(
               icon: Icon(Icons.groups),
               label: 'Sections',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profile',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusCard(String title, String count, IconData icon, Color color) {
+  Widget _buildStatusCard(
+    String title,
+    String count,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.9),
-            color,
-          ],
+          colors: [color.withOpacity(0.9), color],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -680,11 +733,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ),
       child: Column(
         children: [
-          Icon(
-            icon,
-            color: Colors.white,
-            size: 28,
-          ),
+          Icon(icon, color: Colors.white, size: 28),
           const SizedBox(height: 8),
           Text(
             count,
@@ -712,8 +761,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Widget _buildStudentCard(Map<String, dynamic> record) {
     final studentName = record['studentName']?.toString() ?? 'Unknown Student';
-    final studentNumber = record['studentNumber']?.toString() ?? 
-      record['studentId']?.toString() ?? 'N/A';
+    final studentNumber =
+        record['studentNumber']?.toString() ??
+        record['studentId']?.toString() ??
+        'N/A';
     final status = record['status']?.toString().toLowerCase() ?? '';
     final checkInTime = record['checkInTime']?.toString();
     final attendanceId = record['attendanceRecordId'] ?? record['id'];
@@ -752,7 +803,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
           const SizedBox(width: 14),
-          
+
           // Student Info
           Expanded(
             child: Column(
@@ -779,7 +830,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ],
             ),
           ),
-          
+
           // Time/Status
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -805,9 +856,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               const SizedBox(height: 6),
               // Status Badge with Tap to Change
               InkWell(
-                onTap: attendanceId != null ? () => _showStatusChangeDialog(attendanceId, status, studentName) : null,
+                onTap: attendanceId != null
+                    ? () => _showStatusChangeDialog(
+                        attendanceId,
+                        status,
+                        studentName,
+                      )
+                    : null,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: _getStatusColor(status),
                     borderRadius: BorderRadius.circular(8),
@@ -846,13 +906,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  void _showStatusChangeDialog(int attendanceId, String currentStatus, String studentName) {
+  void _showStatusChangeDialog(
+    int attendanceId,
+    String currentStatus,
+    String studentName,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Change Status',
           style: const TextStyle(
@@ -866,16 +928,41 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           children: [
             Text(
               'Student: $studentName',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
             ),
             const SizedBox(height: 20),
-            _buildStatusOption('Present', 'present', Icons.check_circle, const Color(0xFF10B981), currentStatus, attendanceId),
-            _buildStatusOption('Late', 'late', Icons.schedule, const Color(0xFFF59E0B), currentStatus, attendanceId),
-            _buildStatusOption('Absent', 'absent', Icons.cancel, const Color(0xFFEF4444), currentStatus, attendanceId),
-            _buildStatusOption('Excused', 'excused', Icons.info, const Color(0xFF6366F1), currentStatus, attendanceId),
+            _buildStatusOption(
+              'Present',
+              'present',
+              Icons.check_circle,
+              const Color(0xFF10B981),
+              currentStatus,
+              attendanceId,
+            ),
+            _buildStatusOption(
+              'Late',
+              'late',
+              Icons.schedule,
+              const Color(0xFFF59E0B),
+              currentStatus,
+              attendanceId,
+            ),
+            _buildStatusOption(
+              'Absent',
+              'absent',
+              Icons.cancel,
+              const Color(0xFFEF4444),
+              currentStatus,
+              attendanceId,
+            ),
+            _buildStatusOption(
+              'Excused',
+              'excused',
+              Icons.info,
+              const Color(0xFF6366F1),
+              currentStatus,
+              attendanceId,
+            ),
           ],
         ),
         actions: [
@@ -894,7 +981,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _buildStatusOption(String label, String value, IconData icon, Color color, String currentStatus, int attendanceId) {
+  Widget _buildStatusOption(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    String currentStatus,
+    int attendanceId,
+  ) {
     final isSelected = currentStatus.toLowerCase() == value.toLowerCase();
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -912,20 +1006,28 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               color: isSelected ? color.withOpacity(0.1) : Colors.grey[50],
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? color.withOpacity(0.3) : Colors.grey.withOpacity(0.2),
+                color: isSelected
+                    ? color.withOpacity(0.3)
+                    : Colors.grey.withOpacity(0.2),
                 width: isSelected ? 2 : 1,
               ),
             ),
             child: Row(
               children: [
-                Icon(icon, color: isSelected ? color : Colors.grey[600], size: 20),
+                Icon(
+                  icon,
+                  color: isSelected ? color : Colors.grey[600],
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     label,
                     style: TextStyle(
                       color: isSelected ? color : Colors.grey[800],
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w600,
                       fontSize: 15,
                     ),
                   ),
@@ -996,11 +1098,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                _buildSheetOption('All Students', 'all', Icons.people_alt, const Color(0xFF3B82F6)),
-                _buildSheetOption('Present', 'present', Icons.check_circle, const Color(0xFF10B981)),
-                _buildSheetOption('Late', 'late', Icons.schedule, const Color(0xFFF59E0B)),
-                _buildSheetOption('Absent', 'absent', Icons.cancel, const Color(0xFFEF4444)),
-                _buildSheetOption('Excused', 'excused', Icons.info, const Color(0xFF6366F1)),
+                _buildSheetOption(
+                  'All Students',
+                  'all',
+                  Icons.people_alt,
+                  const Color(0xFF3B82F6),
+                ),
+                _buildSheetOption(
+                  'Present',
+                  'present',
+                  Icons.check_circle,
+                  const Color(0xFF10B981),
+                ),
+                _buildSheetOption(
+                  'Late',
+                  'late',
+                  Icons.schedule,
+                  const Color(0xFFF59E0B),
+                ),
+                _buildSheetOption(
+                  'Absent',
+                  'absent',
+                  Icons.cancel,
+                  const Color(0xFFEF4444),
+                ),
+                _buildSheetOption(
+                  'Excused',
+                  'excused',
+                  Icons.info,
+                  const Color(0xFF6366F1),
+                ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -1010,7 +1137,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _buildSheetOption(String label, String value, IconData icon, Color color) {
+  Widget _buildSheetOption(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     final bool active = selectedSort == value;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1030,7 +1162,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               color: active ? color.withOpacity(0.1) : Colors.grey[50],
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: active ? color.withOpacity(0.3) : Colors.grey.withOpacity(0.2),
+                color: active
+                    ? color.withOpacity(0.3)
+                    : Colors.grey.withOpacity(0.2),
                 width: active ? 2 : 1,
               ),
             ),
