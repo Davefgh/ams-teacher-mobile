@@ -1,41 +1,36 @@
 // lib/services/api_service.dart
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import '../utils/constants.dart';
 import 'storage_service.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
-  
+
   factory ApiService() {
     return _instance;
   }
-  
+
   ApiService._internal();
 
   // Map to store cancellable requests
   final Map<String, http.Client> _activeRequests = {};
-  
+
   // Future for coordinating concurrent token refresh attempts
   Future<bool>? _refreshFuture;
-  
-  // Generate unique request ID
-  String _generateRequestId() => DateTime.now().millisecondsSinceEpoch.toString();
 
-  // Create HTTP client that accepts self-signed certificates (for development)
+  // Generate unique request ID
+  String _generateRequestId() =>
+      DateTime.now().millisecondsSinceEpoch.toString();
+
+  // Create HTTP client
+  // Using standard http.Client to avoid Platform._version error
+  // For HTTPS with self-signed certs, you would need platform-specific handling
   http.Client _createHttpClient() {
-    final httpClient = HttpClient();
-    // Allow self-signed certificates for local development
-    httpClient.badCertificateCallback = (X509Certificate cert, String host, int port) {
-      // For local development, accept all certificates
-      // In production, you should validate certificates properly
-      print('⚠️ Accepting self-signed certificate for $host:$port');
-      return true;
-    };
-    return IOClient(httpClient);
+    // For local HTTP development, standard client works fine
+    // If you need HTTPS with self-signed certificates, use conditional imports
+    return http.Client();
   }
 
   // Cancel a request by ID
@@ -70,34 +65,44 @@ class ApiService {
       http.Response response;
       switch (method.toUpperCase()) {
         case 'GET':
-          response = await client.get(uri, headers: headers).timeout(
-            ApiConstants.connectionTimeout,
-            onTimeout: () => throw TimeoutException('Connection timeout'),
-          );
+          response = await client
+              .get(uri, headers: headers)
+              .timeout(
+                ApiConstants.connectionTimeout,
+                onTimeout: () => throw TimeoutException('Connection timeout'),
+              );
           break;
         case 'POST':
-          response = await client.post(uri, headers: headers, body: body).timeout(
-            ApiConstants.connectionTimeout,
-            onTimeout: () => throw TimeoutException('Connection timeout'),
-          );
+          response = await client
+              .post(uri, headers: headers, body: body)
+              .timeout(
+                ApiConstants.connectionTimeout,
+                onTimeout: () => throw TimeoutException('Connection timeout'),
+              );
           break;
         case 'PATCH':
-          response = await client.patch(uri, headers: headers, body: body).timeout(
-            ApiConstants.connectionTimeout,
-            onTimeout: () => throw TimeoutException('Connection timeout'),
-          );
+          response = await client
+              .patch(uri, headers: headers, body: body)
+              .timeout(
+                ApiConstants.connectionTimeout,
+                onTimeout: () => throw TimeoutException('Connection timeout'),
+              );
           break;
         case 'PUT':
-          response = await client.put(uri, headers: headers, body: body).timeout(
-            ApiConstants.connectionTimeout,
-            onTimeout: () => throw TimeoutException('Connection timeout'),
-          );
+          response = await client
+              .put(uri, headers: headers, body: body)
+              .timeout(
+                ApiConstants.connectionTimeout,
+                onTimeout: () => throw TimeoutException('Connection timeout'),
+              );
           break;
         case 'DELETE':
-          response = await client.delete(uri, headers: headers).timeout(
-            ApiConstants.connectionTimeout,
-            onTimeout: () => throw TimeoutException('Connection timeout'),
-          );
+          response = await client
+              .delete(uri, headers: headers)
+              .timeout(
+                ApiConstants.connectionTimeout,
+                onTimeout: () => throw TimeoutException('Connection timeout'),
+              );
           break;
         default:
           throw Exception('Unsupported HTTP method: $method');
@@ -106,9 +111,9 @@ class ApiService {
       // If we get a 401 and retry is enabled, try to refresh token and retry
       if (response.statusCode == 401 && retryOn401) {
         print('🔄 Token expired (401), attempting to refresh...');
-        
+
         final refreshSuccess = await _attemptTokenRefresh();
-        
+
         if (refreshSuccess) {
           // Get new token and retry the request with updated headers
           final newToken = await StorageService.getToken();
@@ -116,9 +121,9 @@ class ApiService {
             // Update headers with new token
             final updatedHeaders = Map<String, String>.from(headers ?? {});
             updatedHeaders['Authorization'] = 'Bearer $newToken';
-            
+
             print('✅ Token refreshed, retrying request...');
-            
+
             // Retry the request (with retryOn401 = false to prevent infinite loop)
             return await _makeRequest(
               method: method,
@@ -158,7 +163,7 @@ class ApiService {
     // Start a new refresh attempt
     final refreshCompleter = _performTokenRefresh();
     _refreshFuture = refreshCompleter;
-    
+
     try {
       final result = await refreshCompleter;
       return result;
@@ -183,38 +188,45 @@ class ApiService {
       }
 
       print('🔄 Refreshing token...');
-      
+
       final client = _createHttpClient();
       try {
-        final response = await client.post(
-          Uri.parse('${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: jsonEncode({
-            'refreshToken': refreshToken,
-            if (oldAccessToken != null) 'oldAccessToken': oldAccessToken,
-          }),
-        ).timeout(
-          ApiConstants.connectionTimeout,
-          onTimeout: () => throw TimeoutException('Token refresh timeout'),
-        );
+        final response = await client
+            .post(
+              Uri.parse(
+                '${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}',
+              ),
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: jsonEncode({
+                'refreshToken': refreshToken,
+                if (oldAccessToken != null) 'oldAccessToken': oldAccessToken,
+              }),
+            )
+            .timeout(
+              ApiConstants.connectionTimeout,
+              onTimeout: () => throw TimeoutException('Token refresh timeout'),
+            );
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
-          
+
           if (data['success'] == true && data['accessToken'] != null) {
             final newAccessToken = data['accessToken'] as String;
-            final newRefreshToken = data['refreshToken'] as String? ?? refreshToken;
-            
+            final newRefreshToken =
+                data['refreshToken'] as String? ?? refreshToken;
+
             // Save new tokens
             await StorageService.saveTokens(newAccessToken, newRefreshToken);
-            
+
             print('✅ Token refreshed successfully');
             return true;
           } else {
-            print('❌ Token refresh failed: ${data['message'] ?? 'Unknown error'}');
+            print(
+              '❌ Token refresh failed: ${data['message'] ?? 'Unknown error'}',
+            );
             return false;
           }
         } else {
@@ -229,10 +241,14 @@ class ApiService {
       return false;
     }
   }
-  
+
   // ==================== AUTH METHODS ====================
-  
-  Future<Map<String, dynamic>> login(String username, String password, {String? requestId}) async {
+
+  Future<Map<String, dynamic>> login(
+    String username,
+    String password, {
+    String? requestId,
+  }) async {
     try {
       final response = await _makeRequest(
         method: 'POST',
@@ -241,12 +257,10 @@ class ApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-        }),
+        body: jsonEncode({'username': username, 'password': password}),
         requestId: requestId,
-        retryOn401: false, // Don't retry on login endpoint (401 means invalid credentials)
+        retryOn401:
+            false, // Don't retry on login endpoint (401 means invalid credentials)
       );
 
       print('Login Status Code: ${response.statusCode}');
@@ -254,13 +268,38 @@ class ApiService {
 
       if (response.statusCode == 200 || response.statusCode == 401) {
         final data = jsonDecode(response.body);
+
+        // Detailed logging to debug response structure
+        print('📦 Parsed Response Data: $data');
+        print('🔑 Response Type: ${data.runtimeType}');
+        print('✅ Has "success" field: ${data.containsKey("success")}');
+        print('🎫 Has "accessToken" field: ${data.containsKey("accessToken")}');
+        print(
+          '🔄 Has "refreshToken" field: ${data.containsKey("refreshToken")}',
+        );
+
+        if (data.containsKey("success")) {
+          print('   → success value: ${data["success"]}');
+        }
+        if (data.containsKey("accessToken")) {
+          print('   → accessToken present: ${data["accessToken"] != null}');
+        }
+        if (data.containsKey("refreshToken")) {
+          print('   → refreshToken present: ${data["refreshToken"] != null}');
+        }
+
+        // Log all keys in response
+        print('📋 All response keys: ${data.keys.toList()}');
+
         return data;
       } else {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
       print('Login error: $e');
-      print('Login URL attempted: ${ApiConstants.baseUrl}${ApiConstants.loginEndpoint}');
+      print(
+        'Login URL attempted: ${ApiConstants.baseUrl}${ApiConstants.loginEndpoint}',
+      );
       rethrow;
     }
   }
@@ -274,7 +313,9 @@ class ApiService {
     try {
       final response = await _makeRequest(
         method: 'POST',
-        uri: Uri.parse('${ApiConstants.baseUrl}${ApiConstants.registerEndpoint}'),
+        uri: Uri.parse(
+          '${ApiConstants.baseUrl}${ApiConstants.registerEndpoint}',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -300,13 +341,18 @@ class ApiService {
   }
 
   /// Manually refresh token (for explicit refresh requests)
-  Future<Map<String, dynamic>> refreshToken(String refreshToken, {String? requestId}) async {
+  Future<Map<String, dynamic>> refreshToken(
+    String refreshToken, {
+    String? requestId,
+  }) async {
     try {
       final oldAccessToken = await StorageService.getAccessToken();
-      
+
       final response = await _makeRequest(
         method: 'POST',
-        uri: Uri.parse('${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}'),
+        uri: Uri.parse(
+          '${ApiConstants.baseUrl}${ApiConstants.refreshEndpoint}',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -321,15 +367,16 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        
+
         if (data['success'] == true && data['accessToken'] != null) {
           final newAccessToken = data['accessToken'] as String;
-          final newRefreshToken = data['refreshToken'] as String? ?? refreshToken;
-          
+          final newRefreshToken =
+              data['refreshToken'] as String? ?? refreshToken;
+
           // Save new tokens
           await StorageService.saveTokens(newAccessToken, newRefreshToken);
         }
-        
+
         return data;
       } else {
         throw Exception('Token refresh failed: ${response.statusCode}');
@@ -362,12 +409,9 @@ class ApiService {
   Future<Map<String, dynamic>> getInstructorProfile({String? requestId}) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
-        return {
-          'success': false,
-          'error': 'Not authenticated.',
-        };
+        return {'success': false, 'error': 'Not authenticated.'};
       }
 
       final url = '${ApiConstants.baseUrl}/api/account/me';
@@ -389,10 +433,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else {
         return {
           'success': false,
@@ -401,10 +442,7 @@ class ApiService {
       }
     } catch (e) {
       print('💥 Error in getInstructorProfile: $e');
-      return {
-        'success': false,
-        'error': 'Error: $e',
-      };
+      return {'success': false, 'error': 'Error: $e'};
     }
   }
 
@@ -418,23 +456,20 @@ class ApiService {
   }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
-        return {
-          'success': false,
-          'error': 'Not authenticated.',
-        };
+        return {'success': false, 'error': 'Not authenticated.'};
       }
 
       final url = '${ApiConstants.baseUrl}/api/account/profile';
       print('🌐 Updating user profile at: $url');
-      
+
       // Build update body - only include non-null fields
       final Map<String, dynamic> updateData = {};
       if (email != null) updateData['email'] = email;
       if (firstname != null) updateData['firstname'] = firstname;
       if (lastname != null) updateData['lastname'] = lastname;
-      
+
       print('📝 Update data: $updateData');
 
       final response = await _makeRequest(
@@ -468,10 +503,7 @@ class ApiService {
           'error': errorData['message'] ?? 'Invalid data',
         };
       } else if (response.statusCode == 404) {
-        return {
-          'success': false,
-          'error': 'Profile not found',
-        };
+        return {'success': false, 'error': 'Profile not found'};
       } else {
         return {
           'success': false,
@@ -480,10 +512,7 @@ class ApiService {
       }
     } catch (e) {
       print('💥 Error in updateInstructorProfile: $e');
-      return {
-        'success': false,
-        'error': 'Error: $e',
-      };
+      return {'success': false, 'error': 'Error: $e'};
     }
   }
 
@@ -491,14 +520,16 @@ class ApiService {
 
   /// Get all sections/subjects for the logged-in instructor
   /// Groups schedules by section name and shows subjects under each section
-  Future<Map<String, dynamic>> getInstructorSections({String? requestId}) async {
+  Future<Map<String, dynamic>> getInstructorSections({
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
       final instructorId = await StorageService.getInstructorId();
-      
+
       print('🔑 Token: ${token != null ? "Present" : "Missing"}');
       print('👤 Instructor ID: $instructorId');
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -526,62 +557,59 @@ class ApiService {
       );
 
       print('📊 Response Status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final List<dynamic> schedules = json.decode(response.body);
         print('🔍 Total schedules received: ${schedules.length}');
-        
+
         if (schedules.isEmpty) {
           print('⚠️ No schedules found for instructor');
-          return {
-            'success': true,
-            'data': {},
-          };
+          return {'success': true, 'data': {}};
         }
-        
+
         // Structure: Section -> [Subjects]
         // We group by Section.Name (BSCS31A, BSBA31C, etc.)
         // Each section contains multiple subjects (from schedules)
-        
+
         final Map<String, List<Map<String, dynamic>>> sectionSubjects = {};
-        
+
         for (var schedule in schedules) {
           print('---Processing Schedule ID: ${schedule['id']}---');
-          
+
           // Extract section info
           var sectionData = schedule['section'];
           if (sectionData == null) {
             print('⏭️ Skipping - No section data');
             continue;
           }
-          
+
           String sectionName = sectionData['name'] ?? 'Unknown';
           int sectionId = sectionData['id'] ?? 0;
-          
+
           print('📝 Section: $sectionName (ID: $sectionId)');
-          
+
           // Initialize section if not exists
           if (!sectionSubjects.containsKey(sectionName)) {
             sectionSubjects[sectionName] = [];
           }
-          
+
           // Extract subject info
           var subjectData = schedule['subject'];
           String subjectName = subjectData?['name'] ?? 'Unknown Subject';
           String subjectCode = subjectData?['code'] ?? 'N/A';
           int subjectId = subjectData?['id'] ?? 0;
-          
+
           print('📚 Subject: $subjectName ($subjectCode)');
-          
+
           // Extract classroom info
           var classroomData = schedule['classroom'];
           String room = classroomData?['name'] ?? '';
-          
+
           // Extract schedule time
           String timeIn = schedule['timeIn'] ?? '';
           String timeOut = schedule['timeOut'] ?? '';
           String dayOfWeek = schedule['dayOfWeek'] ?? '';
-          
+
           String scheduleStr = '';
           if (dayOfWeek.isNotEmpty && timeIn.isNotEmpty && timeOut.isNotEmpty) {
             // Format: "Monday 08:00:00-10:00:00" -> "Monday 08:00-10:00"
@@ -589,10 +617,10 @@ class ApiService {
             String formattedTimeOut = timeOut.substring(0, 5); // Get HH:MM
             scheduleStr = '$dayOfWeek $formattedTimeIn-$formattedTimeOut';
           }
-          
+
           print('⏰ Schedule: $scheduleStr');
           print('🏫 Room: $room');
-          
+
           // Add subject to section
           sectionSubjects[sectionName]!.add({
             'sectionId': sectionId,
@@ -607,36 +635,26 @@ class ApiService {
             'scheduleId': schedule['id'],
             'studentCount': 0, // Will be loaded separately
           });
-          
+
           print('✅ Added subject to section');
         }
-        
+
         print('✅ Grouped by section: ${sectionSubjects.keys.length} sections');
         sectionSubjects.forEach((section, subjects) {
           print('  📚 $section: ${subjects.length} subjects');
         });
-        
-        return {
-          'success': true,
-          'data': sectionSubjects,
-        };
-        
+
+        return {'success': true, 'data': sectionSubjects};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
           'error': 'Session expired. Please login again.',
         };
       } else if (response.statusCode == 403) {
-        return {
-          'success': false,
-          'error': 'Access denied.',
-        };
+        return {'success': false, 'error': 'Access denied.'};
       } else if (response.statusCode == 404) {
         print('❌ Not Found - No schedules for this instructor');
-        return {
-          'success': true,
-          'data': {},
-        };
+        return {'success': true, 'data': {}};
       } else {
         print('❌ Unexpected status: ${response.statusCode}');
         print('Response: ${response.body}');
@@ -649,7 +667,7 @@ class ApiService {
       print('💥 Error in getInstructorSections: $e');
       return {
         'success': false,
-        'error': e.toString().contains('timeout') 
+        'error': e.toString().contains('timeout')
             ? 'Connection timeout. Please check your internet.'
             : 'Error: $e',
       };
@@ -658,10 +676,13 @@ class ApiService {
 
   /// Get students for a specific section
   /// This gets ALL students in a section
-  Future<Map<String, dynamic>> getSectionStudents(int sectionId, {String? requestId}) async {
+  Future<Map<String, dynamic>> getSectionStudents(
+    int sectionId, {
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -670,7 +691,8 @@ class ApiService {
       }
 
       // Use the correct endpoint for getting section students
-      final url = '${ApiConstants.baseUrl}/api/sections/$sectionId/all-students';
+      final url =
+          '${ApiConstants.baseUrl}/api/sections/$sectionId/all-students';
       print('🌐 Fetching students from: $url');
 
       final response = await _makeRequest(
@@ -688,7 +710,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final List<dynamic> students = json.decode(response.body);
-        
+
         final processedStudents = students.map((student) {
           return {
             'id': student['id'] ?? 0,
@@ -699,28 +721,19 @@ class ApiService {
             'studentId': student['id']?.toString() ?? 'N/A',
           };
         }).toList();
-        
+
         print('✅ Processed ${processedStudents.length} students');
-        
-        return {
-          'success': true,
-          'data': processedStudents,
-        };
+
+        return {'success': true, 'data': processedStudents};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
           'error': 'Session expired. Please login again.',
         };
       } else if (response.statusCode == 403) {
-        return {
-          'success': false,
-          'error': 'Access denied to this section.',
-        };
+        return {'success': false, 'error': 'Access denied to this section.'};
       } else if (response.statusCode == 404) {
-        return {
-          'success': false,
-          'error': 'Section not found.',
-        };
+        return {'success': false, 'error': 'Section not found.'};
       } else {
         return {
           'success': false,
@@ -739,10 +752,13 @@ class ApiService {
   }
 
   /// Get section details
-  Future<Map<String, dynamic>> getSectionDetails(int sectionId, {String? requestId}) async {
+  Future<Map<String, dynamic>> getSectionDetails(
+    int sectionId, {
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -768,7 +784,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final section = json.decode(response.body);
-        
+
         return {
           'success': true,
           'data': {
@@ -783,10 +799,7 @@ class ApiService {
           'error': 'Session expired. Please login again.',
         };
       } else if (response.statusCode == 403) {
-        return {
-          'success': false,
-          'error': 'Access denied to this section.',
-        };
+        return {'success': false, 'error': 'Access denied to this section.'};
       } else {
         return {
           'success': false,
@@ -823,7 +836,7 @@ class ApiService {
   }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -831,21 +844,25 @@ class ApiService {
         };
       }
 
-      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}').replace(
-        queryParameters: {
-          if (studentId != null) 'StudentId': studentId.toString(),
-          if (sessionId != null) 'SessionId': sessionId.toString(),
-          if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
-          if (sectionId != null) 'SectionId': sectionId.toString(),
-          if (subjectId != null) 'SubjectId': subjectId.toString(),
-          if (status != null) 'Status': status,
-          if (startDate != null) 'StartDate': startDate.toIso8601String(),
-          if (endDate != null) 'EndDate': endDate.toIso8601String(),
-          if (isManualEntry != null) 'IsManualEntry': isManualEntry.toString(),
-          if (pageNumber != null) 'PageNumber': pageNumber.toString(),
-          if (pageSize != null) 'PageSize': pageSize.toString(),
-        },
-      );
+      final uri =
+          Uri.parse(
+            '${ApiConstants.baseUrl}${ApiConstants.attendanceEndpoint}',
+          ).replace(
+            queryParameters: {
+              if (studentId != null) 'StudentId': studentId.toString(),
+              if (sessionId != null) 'SessionId': sessionId.toString(),
+              if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
+              if (sectionId != null) 'SectionId': sectionId.toString(),
+              if (subjectId != null) 'SubjectId': subjectId.toString(),
+              if (status != null) 'Status': status,
+              if (startDate != null) 'StartDate': startDate.toIso8601String(),
+              if (endDate != null) 'EndDate': endDate.toIso8601String(),
+              if (isManualEntry != null)
+                'IsManualEntry': isManualEntry.toString(),
+              if (pageNumber != null) 'PageNumber': pageNumber.toString(),
+              if (pageSize != null) 'PageSize': pageSize.toString(),
+            },
+          );
 
       print('🌐 Fetching attendance from: $uri');
 
@@ -864,10 +881,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -891,10 +905,13 @@ class ApiService {
   }
 
   /// Get attendance by session ID
-  Future<Map<String, dynamic>> getAttendanceBySession(int sessionId, {String? requestId}) async {
+  Future<Map<String, dynamic>> getAttendanceBySession(
+    int sessionId, {
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -902,7 +919,8 @@ class ApiService {
         };
       }
 
-      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceBySessionEndpoint(sessionId)}';
+      final url =
+          '${ApiConstants.baseUrl}${ApiConstants.attendanceBySessionEndpoint(sessionId)}';
       print('🌐 Fetching attendance by session from: $url');
 
       final response = await _makeRequest(
@@ -920,10 +938,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -947,10 +962,13 @@ class ApiService {
   }
 
   /// Get attendance by student ID
-  Future<Map<String, dynamic>> getAttendanceByStudent(int studentId, {String? requestId}) async {
+  Future<Map<String, dynamic>> getAttendanceByStudent(
+    int studentId, {
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -958,7 +976,8 @@ class ApiService {
         };
       }
 
-      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByStudentEndpoint(studentId)}';
+      final url =
+          '${ApiConstants.baseUrl}${ApiConstants.attendanceByStudentEndpoint(studentId)}';
       print('🌐 Fetching attendance by student from: $url');
 
       final response = await _makeRequest(
@@ -974,10 +993,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -1001,10 +1017,13 @@ class ApiService {
   }
 
   /// Get attendance by ID
-  Future<Map<String, dynamic>> getAttendanceById(int id, {String? requestId}) async {
+  Future<Map<String, dynamic>> getAttendanceById(
+    int id, {
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -1012,7 +1031,8 @@ class ApiService {
         };
       }
 
-      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
+      final url =
+          '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
       print('🌐 Fetching attendance by ID from: $url');
 
       final response = await _makeRequest(
@@ -1028,10 +1048,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -1065,7 +1082,7 @@ class ApiService {
   }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -1101,20 +1118,21 @@ class ApiService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
           'error': 'Session expired. Please login again.',
         };
       } else {
-        final errorBody = response.body.isNotEmpty ? json.decode(response.body) : {};
+        final errorBody = response.body.isNotEmpty
+            ? json.decode(response.body)
+            : {};
         return {
           'success': false,
-          'error': errorBody['message'] ?? 'Failed to create attendance: ${response.statusCode}',
+          'error':
+              errorBody['message'] ??
+              'Failed to create attendance: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -1137,7 +1155,7 @@ class ApiService {
   }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -1145,7 +1163,8 @@ class ApiService {
         };
       }
 
-      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
+      final url =
+          '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
       print('🌐 Updating attendance at: $url');
 
       final body = <String, dynamic>{};
@@ -1168,20 +1187,21 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
           'error': 'Session expired. Please login again.',
         };
       } else {
-        final errorBody = response.body.isNotEmpty ? json.decode(response.body) : {};
+        final errorBody = response.body.isNotEmpty
+            ? json.decode(response.body)
+            : {};
         return {
           'success': false,
-          'error': errorBody['message'] ?? 'Failed to update attendance: ${response.statusCode}',
+          'error':
+              errorBody['message'] ??
+              'Failed to update attendance: ${response.statusCode}',
         };
       }
     } catch (e) {
@@ -1196,10 +1216,13 @@ class ApiService {
   }
 
   /// Delete attendance record
-  Future<Map<String, dynamic>> deleteAttendance(int id, {String? requestId}) async {
+  Future<Map<String, dynamic>> deleteAttendance(
+    int id, {
+    String? requestId,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -1207,7 +1230,8 @@ class ApiService {
         };
       }
 
-      final url = '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
+      final url =
+          '${ApiConstants.baseUrl}${ApiConstants.attendanceByIdEndpoint(id)}';
       print('🌐 Deleting attendance at: $url');
 
       final response = await _makeRequest(
@@ -1222,9 +1246,7 @@ class ApiService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 204) {
-        return {
-          'success': true,
-        };
+        return {'success': true};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -1264,7 +1286,7 @@ class ApiService {
   }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -1272,21 +1294,25 @@ class ApiService {
         };
       }
 
-      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.attendanceSummaryEndpoint}').replace(
-        queryParameters: {
-          if (studentId != null) 'StudentId': studentId.toString(),
-          if (sessionId != null) 'SessionId': sessionId.toString(),
-          if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
-          if (sectionId != null) 'SectionId': sectionId.toString(),
-          if (subjectId != null) 'SubjectId': subjectId.toString(),
-          if (status != null) 'Status': status,
-          if (startDate != null) 'StartDate': startDate.toIso8601String(),
-          if (endDate != null) 'EndDate': endDate.toIso8601String(),
-          if (isManualEntry != null) 'IsManualEntry': isManualEntry.toString(),
-          if (pageNumber != null) 'PageNumber': pageNumber.toString(),
-          if (pageSize != null) 'PageSize': pageSize.toString(),
-        },
-      );
+      final uri =
+          Uri.parse(
+            '${ApiConstants.baseUrl}${ApiConstants.attendanceSummaryEndpoint}',
+          ).replace(
+            queryParameters: {
+              if (studentId != null) 'StudentId': studentId.toString(),
+              if (sessionId != null) 'SessionId': sessionId.toString(),
+              if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
+              if (sectionId != null) 'SectionId': sectionId.toString(),
+              if (subjectId != null) 'SubjectId': subjectId.toString(),
+              if (status != null) 'Status': status,
+              if (startDate != null) 'StartDate': startDate.toIso8601String(),
+              if (endDate != null) 'EndDate': endDate.toIso8601String(),
+              if (isManualEntry != null)
+                'IsManualEntry': isManualEntry.toString(),
+              if (pageNumber != null) 'PageNumber': pageNumber.toString(),
+              if (pageSize != null) 'PageSize': pageSize.toString(),
+            },
+          );
 
       print('🌐 Fetching attendance summary from: $uri');
 
@@ -1303,10 +1329,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -1338,7 +1361,7 @@ class ApiService {
   }) async {
     try {
       final token = await StorageService.getToken();
-      
+
       if (token == null) {
         return {
           'success': false,
@@ -1346,13 +1369,16 @@ class ApiService {
         };
       }
 
-      final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.sessionsEndpoint}').replace(
-        queryParameters: {
-          if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
-          if (startDate != null) 'StartDate': startDate.toIso8601String(),
-          if (endDate != null) 'EndDate': endDate.toIso8601String(),
-        },
-      );
+      final uri =
+          Uri.parse(
+            '${ApiConstants.baseUrl}${ApiConstants.sessionsEndpoint}',
+          ).replace(
+            queryParameters: {
+              if (scheduleId != null) 'ScheduleId': scheduleId.toString(),
+              if (startDate != null) 'StartDate': startDate.toIso8601String(),
+              if (endDate != null) 'EndDate': endDate.toIso8601String(),
+            },
+          );
 
       print('🌐 Fetching sessions from: $uri');
 
@@ -1369,10 +1395,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'success': true,
-          'data': data,
-        };
+        return {'success': true, 'data': data};
       } else if (response.statusCode == 401) {
         return {
           'success': false,

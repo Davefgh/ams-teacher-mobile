@@ -38,14 +38,14 @@ class _SectionsScreenState extends State<SectionsScreen> {
     if (result['success']) {
       setState(() {
         _groupedSections = Map<String, List<Map<String, dynamic>>>.from(
-          result['data'].map((key, value) => MapEntry(
-            key,
-            List<Map<String, dynamic>>.from(value),
-          )),
+          result['data'].map(
+            (key, value) =>
+                MapEntry(key, List<Map<String, dynamic>>.from(value)),
+          ),
         );
         // Initialize all programs as collapsed
         _expandedPrograms = {
-          for (var program in _groupedSections.keys) program: false
+          for (var program in _groupedSections.keys) program: false,
         };
         _isLoading = false;
       });
@@ -66,11 +66,7 @@ class _SectionsScreenState extends State<SectionsScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1E3A8A),
-              Color(0xFF3B82F6),
-              Color(0xFF60A5FA),
-            ],
+            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6), Color(0xFF60A5FA)],
           ),
         ),
         child: SafeArea(
@@ -89,34 +85,29 @@ class _SectionsScreenState extends State<SectionsScreen> {
     return Column(
       children: [
         // Header
-        Padding(
-          padding: ResponsiveUtils.getResponsivePadding(context),
+        Container(
+          padding: const EdgeInsets.all(20),
           child: Row(
             children: [
               Image.asset(
                 'lib/images/aclc_logo.png',
-                width: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
-                height: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
+                width: 50,
+                height: 50,
                 fit: BoxFit.contain,
               ),
-              SizedBox(width: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 12, desktop: 16)),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'My Classes',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 20, tablet: 24, desktop: 28),
-                      ),
-                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
                 ),
               ),
               IconButton(
-                icon: Icon(
-                  Icons.refresh,
-                  color: Colors.white,
-                  size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 24, tablet: 28, desktop: 32),
-                ),
+                icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
                 onPressed: _loadSections,
               ),
             ],
@@ -145,12 +136,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
       children: [
         // Left sidebar
         Container(
-          width: ResponsiveUtils.getResponsiveSpacing(context, mobile: 0, tablet: 200, desktop: 250),
+          width: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 0,
+            tablet: 200,
+            desktop: 250,
+          ),
           decoration: const BoxDecoration(
             color: Color(0xFF1E3A8A),
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(25),
-            ),
+            borderRadius: BorderRadius.only(topRight: Radius.circular(25)),
           ),
           child: Column(
             children: [
@@ -160,18 +154,41 @@ class _SectionsScreenState extends State<SectionsScreen> {
                   children: [
                     Image.asset(
                       'lib/images/aclc_logo.png',
-                      width: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
-                      height: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
+                      width: ResponsiveUtils.getResponsiveImageSize(
+                        context,
+                        mobile: 40,
+                        tablet: 50,
+                        desktop: 60,
+                      ),
+                      height: ResponsiveUtils.getResponsiveImageSize(
+                        context,
+                        mobile: 40,
+                        tablet: 50,
+                        desktop: 60,
+                      ),
                       fit: BoxFit.contain,
                     ),
-                    SizedBox(height: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 12, desktop: 16)),
+                    SizedBox(
+                      height: ResponsiveUtils.getResponsiveSpacing(
+                        context,
+                        mobile: 8,
+                        tablet: 12,
+                        desktop: 16,
+                      ),
+                    ),
                     Text(
                       'My Classes',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 16, tablet: 18, desktop: 20),
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: ResponsiveUtils.getResponsiveFontSize(
+                              context,
+                              mobile: 16,
+                              tablet: 18,
+                              desktop: 20,
+                            ),
+                          ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -297,7 +314,8 @@ class _SectionsScreenState extends State<SectionsScreen> {
                   ListTile(
                     title: Text(
                       programName,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF1E3A8A),
                             fontSize: ResponsiveUtils.getResponsiveFontSize(
@@ -334,10 +352,19 @@ class _SectionsScreenState extends State<SectionsScreen> {
                     const Divider(height: 1),
                     Padding(
                       padding: EdgeInsets.symmetric(
-                        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 10, desktop: 12),
+                        vertical: ResponsiveUtils.getResponsiveSpacing(
+                          context,
+                          mobile: 8,
+                          tablet: 10,
+                          desktop: 12,
+                        ),
                       ),
                       child: Column(
-                        children: sections.map((section) => _buildSectionCard(context, section)).toList(),
+                        children: sections
+                            .map(
+                              (section) => _buildSectionCard(context, section),
+                            )
+                            .toList(),
                       ),
                     ),
                   ],
@@ -357,8 +384,18 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
     return Container(
       margin: EdgeInsets.symmetric(
-        horizontal: ResponsiveUtils.getResponsiveSpacing(context, mobile: 12, tablet: 16, desktop: 20),
-        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 6, tablet: 8, desktop: 10),
+        horizontal: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 12,
+          tablet: 16,
+          desktop: 20,
+        ),
+        vertical: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 6,
+          tablet: 8,
+          desktop: 10,
+        ),
       ),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
@@ -367,8 +404,18 @@ class _SectionsScreenState extends State<SectionsScreen> {
       ),
       child: ListTile(
         leading: Container(
-          width: ResponsiveUtils.getResponsiveSpacing(context, mobile: 32, tablet: 40, desktop: 48),
-          height: ResponsiveUtils.getResponsiveSpacing(context, mobile: 32, tablet: 40, desktop: 48),
+          width: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 32,
+            tablet: 40,
+            desktop: 48,
+          ),
+          height: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 32,
+            tablet: 40,
+            desktop: 48,
+          ),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
@@ -376,7 +423,12 @@ class _SectionsScreenState extends State<SectionsScreen> {
           child: Icon(
             iconData,
             color: color,
-            size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 16, tablet: 20, desktop: 24),
+            size: ResponsiveUtils.getResponsiveSpacing(
+              context,
+              mobile: 16,
+              tablet: 20,
+              desktop: 24,
+            ),
           ),
         ),
         title: Text(
@@ -384,13 +436,23 @@ class _SectionsScreenState extends State<SectionsScreen> {
           style: TextStyle(
             fontWeight: FontWeight.w600,
             color: const Color(0xFF1E3A8A),
-            fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 14, tablet: 16, desktop: 18),
+            fontSize: ResponsiveUtils.getResponsiveFontSize(
+              context,
+              mobile: 14,
+              tablet: 16,
+              desktop: 18,
+            ),
           ),
         ),
         trailing: Icon(
           Icons.chevron_right,
           color: const Color(0xFF1E3A8A),
-          size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 16, tablet: 20, desktop: 24),
+          size: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 16,
+            tablet: 20,
+            desktop: 24,
+          ),
         ),
         onTap: () {
           Navigator.of(context).push(
@@ -409,11 +471,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   IconData _getSubjectIcon(String subjectName) {
     final name = subjectName.toLowerCase();
-    if (name.contains('programming') || name.contains('code')) return Icons.code;
-    if (name.contains('data') || name.contains('structure')) return Icons.storage;
+    if (name.contains('programming') || name.contains('code'))
+      return Icons.code;
+    if (name.contains('data') || name.contains('structure'))
+      return Icons.storage;
     if (name.contains('math')) return Icons.calculate;
-    if (name.contains('computing') || name.contains('computer')) return Icons.computer;
-    if (name.contains('self') || name.contains('psychology')) return Icons.psychology;
+    if (name.contains('computing') || name.contains('computer'))
+      return Icons.computer;
+    if (name.contains('self') || name.contains('psychology'))
+      return Icons.psychology;
     if (name.contains('network')) return Icons.lan;
     if (name.contains('database')) return Icons.dns;
     if (name.contains('web')) return Icons.web;
@@ -422,11 +488,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   Color _getSubjectColor(String subjectName) {
     final name = subjectName.toLowerCase();
-    if (name.contains('programming') || name.contains('code')) return Colors.blue;
-    if (name.contains('data') || name.contains('structure')) return Colors.purple;
+    if (name.contains('programming') || name.contains('code'))
+      return Colors.blue;
+    if (name.contains('data') || name.contains('structure'))
+      return Colors.purple;
     if (name.contains('math')) return Colors.orange;
-    if (name.contains('computing') || name.contains('computer')) return Colors.red;
-    if (name.contains('self') || name.contains('psychology')) return Colors.green;
+    if (name.contains('computing') || name.contains('computer'))
+      return Colors.red;
+    if (name.contains('self') || name.contains('psychology'))
+      return Colors.green;
     if (name.contains('network')) return Colors.teal;
     if (name.contains('database')) return Colors.indigo;
     if (name.contains('web')) return Colors.pink;
@@ -445,12 +515,27 @@ class _SectionsScreenState extends State<SectionsScreen> {
     );
   }
 
-  Widget _buildSidebarItem(BuildContext context, IconData icon, String label, int index) {
+  Widget _buildSidebarItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    int index,
+  ) {
     final isSelected = index == 3;
     return Container(
       margin: EdgeInsets.symmetric(
-        horizontal: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 12, desktop: 16),
-        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 4, tablet: 6, desktop: 8),
+        horizontal: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 8,
+          tablet: 12,
+          desktop: 16,
+        ),
+        vertical: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 4,
+          tablet: 6,
+          desktop: 8,
+        ),
       ),
       decoration: BoxDecoration(
         color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
@@ -460,13 +545,23 @@ class _SectionsScreenState extends State<SectionsScreen> {
         leading: Icon(
           icon,
           color: Colors.white,
-          size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 20, tablet: 24, desktop: 28),
+          size: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 20,
+            tablet: 24,
+            desktop: 28,
+          ),
         ),
         title: Text(
           label,
           style: TextStyle(
             color: Colors.white,
-            fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 14, tablet: 16, desktop: 18),
+            fontSize: ResponsiveUtils.getResponsiveFontSize(
+              context,
+              mobile: 14,
+              tablet: 16,
+              desktop: 18,
+            ),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -497,9 +592,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
           onTap: (index) => _handleNavigation(context, index),
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.assignment), label: 'Attendance'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.assignment),
+              label: 'Attendance',
+            ),
             BottomNavigationBarItem(icon: Icon(Icons.qr_code), label: 'QR'),
-            BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Sections'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.groups),
+              label: 'Sections',
+            ),
             BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
@@ -511,19 +612,27 @@ class _SectionsScreenState extends State<SectionsScreen> {
   void _handleNavigation(BuildContext context, int index) {
     switch (index) {
       case 0:
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const DashboardScreen()));
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
         break;
       case 1:
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AttendanceScreen()));
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const AttendanceScreen()),
+        );
         break;
       case 2:
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => QrScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (context) => QrScreen()));
         break;
       case 3:
         // Already on sections
         break;
       case 4:
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
         break;
     }
   }

@@ -13,6 +13,7 @@
     <!-- Specific configuration for local network -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">192.168.254.106</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
         <trust-anchors>
