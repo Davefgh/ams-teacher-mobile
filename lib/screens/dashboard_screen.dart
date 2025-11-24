@@ -5,6 +5,7 @@ import 'profile_screen.dart';
 import 'qr_screen.dart';
 import 'sections_screen.dart';
 import '../services/api_service.dart';
+import '../services/session_state.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -15,20 +16,20 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
-  
+
   // Countdown timers
   Duration currentClassTimeLeft = Duration.zero;
   Duration nextClassTimeLeft = Duration.zero;
-  
+
   DateTime? currentClassEnd;
   DateTime? nextClassStart;
-  
+
   // Schedule data
   Map<String, dynamic>? currentClass;
   Map<String, dynamic>? nextClass;
   bool _isLoading = true;
   String? _errorMessage;
-  
+
   // Stats data
   int _totalSections = 0;
   int _totalSubjects = 0;
@@ -53,28 +54,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Extract all schedules from grouped sections
       List<Map<String, dynamic>> allSchedules = [];
       final groupedSections = result['data'] as Map<String, dynamic>;
-      
+
       _groupedSections = groupedSections;
-      
+
       // Calculate stats
       _totalSections = groupedSections.keys.length;
       _totalSubjects = 0;
-      
+
       for (var subjects in groupedSections.values) {
         final subjectList = List<Map<String, dynamic>>.from(subjects);
         _totalSubjects += subjectList.length;
         allSchedules.addAll(subjectList);
       }
-      
+
       // Load student count
       await _loadStudentCount();
 
       _findCurrentAndNextClass(allSchedules);
-      
+
       setState(() {
         _isLoading = false;
       });
-      
+
       // Start countdown timer
       _startCountdown();
     } else {
@@ -84,13 +85,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     }
   }
-  
+
   Future<void> _loadStudentCount() async {
     int totalStudents = 0;
-    
+
     // Get unique section IDs from all subjects
     Set<int> uniqueSectionIds = {};
-    
+
     for (var subjects in _groupedSections.values) {
       final subjectList = List<Map<String, dynamic>>.from(subjects);
       for (var subject in subjectList) {
@@ -99,7 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     }
-    
+
     // Fetch student count for each unique section
     for (var sectionId in uniqueSectionIds) {
       final result = await _apiService.getSectionStudents(sectionId);
@@ -108,48 +109,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
         totalStudents += students.length;
       }
     }
-    
+
     setState(() {
       _totalStudents = totalStudents;
     });
   }
 
   void _findCurrentAndNextClass(List<Map<String, dynamic>> allSchedules) {
+    // Check global session state first
+    if (SessionState.instance.isActive) {
+      final sessionSchedule = SessionState.instance.currentSchedule;
+      if (sessionSchedule != null) {
+        setState(() {
+          currentClass = {
+            'subjectName': sessionSchedule['name'],
+            'subjectCode': sessionSchedule['code'],
+            'room': sessionSchedule['room'],
+            'schedule': sessionSchedule['time'],
+            'scheduleId': sessionSchedule['id'],
+          };
+          nextClass = null;
+          currentClassEnd = null;
+        });
+        return;
+      }
+    }
+
     final now = DateTime.now();
     final currentDay = DateFormat('EEEE').format(now); // e.g., "Monday"
-    
+
     Map<String, dynamic>? foundCurrentClass;
     Map<String, dynamic>? foundNextClass;
     DateTime? foundCurrentClassEnd;
     DateTime? foundNextClassStart;
-    
+
     // Filter schedules for today
     final todaySchedules = allSchedules.where((schedule) {
       final scheduleStr = schedule['schedule']?.toString() ?? '';
       return scheduleStr.startsWith(currentDay);
     }).toList();
-    
+
     // Parse and sort today's schedules by time
     List<Map<String, dynamic>> parsedSchedules = [];
-    
+
     for (var schedule in todaySchedules) {
       final scheduleStr = schedule['schedule']?.toString() ?? '';
       final parts = scheduleStr.split(' ');
-      
+
       if (parts.length < 2) continue;
-      
+
       final timeRange = parts[1]; // e.g., "08:00-10:00"
       final timeParts = timeRange.split('-');
-      
+
       if (timeParts.length != 2) continue;
-      
+
       try {
         final startTime = _parseTime(timeParts[0]);
         final endTime = _parseTime(timeParts[1]);
-        
-        final startDateTime = DateTime(now.year, now.month, now.day, startTime.hour, startTime.minute);
-        final endDateTime = DateTime(now.year, now.month, now.day, endTime.hour, endTime.minute);
-        
+
+        final startDateTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          startTime.hour,
+          startTime.minute,
+        );
+        final endDateTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          endTime.hour,
+          endTime.minute,
+        );
+
         parsedSchedules.add({
           ...schedule,
           'startDateTime': startDateTime,
@@ -161,43 +193,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
         print('Error parsing time for schedule: $scheduleStr - $e');
       }
     }
-    
+
     // Sort by start time
-    parsedSchedules.sort((a, b) => 
-      (a['startDateTime'] as DateTime).compareTo(b['startDateTime'] as DateTime)
+    parsedSchedules.sort(
+      (a, b) => (a['startDateTime'] as DateTime).compareTo(
+        b['startDateTime'] as DateTime,
+      ),
     );
-    
+
     // Find current class (ongoing now)
     for (var schedule in parsedSchedules) {
       final startDateTime = schedule['startDateTime'] as DateTime;
       final endDateTime = schedule['endDateTime'] as DateTime;
-      
+
       if (now.isAfter(startDateTime) && now.isBefore(endDateTime)) {
         foundCurrentClass = schedule;
         foundCurrentClassEnd = endDateTime;
         break;
       }
     }
-    
+
     // Find next class (starts after now)
     for (var schedule in parsedSchedules) {
       final startDateTime = schedule['startDateTime'] as DateTime;
-      
+
       if (now.isBefore(startDateTime)) {
         // Skip if this is already set as current class
-        if (foundCurrentClass != null && 
+        if (foundCurrentClass != null &&
             schedule['scheduleId'] == foundCurrentClass['scheduleId']) {
           continue;
         }
-        
+
         foundNextClass = schedule;
         foundNextClassStart = startDateTime;
         break;
       }
     }
-    
+
     // If no current class found, but there are future classes today
-    if (foundCurrentClass == null && foundNextClass == null && parsedSchedules.isNotEmpty) {
+    if (foundCurrentClass == null &&
+        foundNextClass == null &&
+        parsedSchedules.isNotEmpty) {
       // Check if there's a class coming up today
       for (var schedule in parsedSchedules) {
         final startDateTime = schedule['startDateTime'] as DateTime;
@@ -208,7 +244,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     }
-    
+
     setState(() {
       currentClass = foundCurrentClass;
       nextClass = foundNextClass;
@@ -218,13 +254,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   TimeOfDay _parseTime(String timeStr) {
-    // Parse "HH:MM" format
     final parts = timeStr.trim().split(':');
     if (parts.length >= 2) {
-      return TimeOfDay(
-        hour: int.parse(parts[0]),
-        minute: int.parse(parts[1]),
-      );
+      return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
     }
     throw FormatException('Invalid time format: $timeStr');
   }
@@ -233,21 +265,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         final now = DateTime.now();
-        
+
         // Update current class countdown
-        if (currentClassEnd != null && now.isBefore(currentClassEnd!)) {
+        if (SessionState.instance.isActive &&
+            SessionState.instance.startTime != null) {
+          currentClassTimeLeft = now.difference(
+            SessionState.instance.startTime!,
+          );
+        } else if (currentClassEnd != null && now.isBefore(currentClassEnd!)) {
           currentClassTimeLeft = currentClassEnd!.difference(now);
         } else {
           currentClassTimeLeft = Duration.zero;
         }
-        
+
         // Update next class countdown
         if (nextClassStart != null && now.isBefore(nextClassStart!)) {
           nextClassTimeLeft = nextClassStart!.difference(now);
         } else {
           nextClassTimeLeft = Duration.zero;
         }
-        
+
         setState(() {});
         _startCountdown();
       }
@@ -258,7 +295,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
     String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    
+
     if (duration.inHours > 0) {
       return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
     } else {
@@ -268,16 +305,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _formatScheduleTime(String? schedule) {
     if (schedule == null || schedule.isEmpty) return '';
-    
-    // Extract time from "Monday 08:00-10:00" format
+
     final parts = schedule.split(' ');
     if (parts.length < 2) return '';
-    
-    final timeRange = parts[1]; // "08:00-10:00"
+
+    final timeRange = parts[1];
     final times = timeRange.split('-');
     if (times.isEmpty) return '';
-    
-    // Return start time (e.g., "08:00 AM")
+
     try {
       final time = _parseTime(times[0]);
       final hour = time.hour;
@@ -286,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
       return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period';
     } catch (e) {
-      return times[0]; // Return as is if parsing fails
+      return times[0];
     }
   }
 
@@ -299,11 +334,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1E3A8A), // Deep blue
-              Color(0xFF3B82F6), // Blue
-              Color(0xFF60A5FA), // Light blue
-            ],
+            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6), Color(0xFF60A5FA)],
           ),
         ),
         child: SafeArea(
@@ -314,26 +345,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    // ACLC Logo
                     Image.asset(
-                'lib/images/aclc_logo.png',
+                      'lib/images/aclc_logo.png',
                       width: 50,
                       height: 50,
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(width: 12),
-                    // Teacher Dashboard Title
                     Expanded(
                       child: Text(
                         'Teacher Dashboard',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 24,
-                        ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                            ),
                       ),
                     ),
-                    // Notification Bell
                     const Icon(
                       Icons.notifications_outlined,
                       color: Colors.white,
@@ -342,7 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-              
+
               // Main Content
               Expanded(
                 child: Container(
@@ -358,25 +387,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Overview Section
                         Text(
                           'Overview',
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF1E3A8A),
-                            fontSize: 20,
-                          ),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1E3A8A),
+                                fontSize: 20,
+                              ),
                         ),
                         const SizedBox(height: 16),
-                        
-                        // Overview Cards Grid
+
                         GridView.count(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
-                          childAspectRatio: 1.3, // Increased from 1.5 to give more vertical space
+                          childAspectRatio: 1.3,
                           children: [
                             _buildOverviewCard(
                               'Sections',
@@ -398,22 +426,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             _buildOverviewCard(
                               'Classes',
-                              _isLoading ? '...' : '${_totalSubjects > 0 ? _totalSubjects : "0"}',
+                              _isLoading
+                                  ? '...'
+                                  : '${_totalSubjects > 0 ? _totalSubjects : "0"}',
                               Icons.class_,
                               const Color(0xFFF59E0B),
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 20),
-                        
-                        // Loading or Error State
+
                         if (_isLoading)
                           const Center(
                             child: Padding(
                               padding: EdgeInsets.all(40.0),
                               child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E3A8A)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF1E3A8A),
+                                ),
                               ),
                             ),
                           )
@@ -423,7 +454,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               padding: const EdgeInsets.all(20.0),
                               child: Column(
                                 children: [
-                                  Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: 48,
+                                    color: Colors.red[300],
+                                  ),
                                   const SizedBox(height: 12),
                                   Text(
                                     _errorMessage!,
@@ -445,52 +480,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           )
                         else ...[
-                          // Current Class Section
                           Text(
                             'Current Class',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1E3A8A),
-                              fontSize: 20,
-                            ),
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF1E3A8A),
+                                  fontSize: 20,
+                                ),
                           ),
                           const SizedBox(height: 16),
-                          
+
                           if (currentClass != null)
                             _buildClassCard(
                               currentClass!['subjectName'] ?? 'Unknown Subject',
                               currentClass!['subjectCode'] ?? 'N/A',
                               '${currentClass!['room'] ?? 'TBA'} • ${_formatScheduleTime(currentClass!['schedule'])}',
                               currentClass!['schedule'] ?? '',
-                              DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                              DateFormat(
+                                'EEEE, MMMM d, yyyy',
+                              ).format(DateTime.now()),
                               _formatDuration(currentClassTimeLeft),
-                              true, // is current class
+                              true,
                             )
                           else
                             _buildNoClassCard('No ongoing class at the moment'),
-                          
+
                           const SizedBox(height: 16),
-                          
-                          // Next Class Section
+
                           Text(
                             'Next Class',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1E3A8A),
-                              fontSize: 20,
-                            ),
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF1E3A8A),
+                                  fontSize: 20,
+                                ),
                           ),
                           const SizedBox(height: 16),
-                          
+
                           if (nextClass != null)
                             _buildClassCard(
                               nextClass!['subjectName'] ?? 'Unknown Subject',
                               nextClass!['subjectCode'] ?? 'N/A',
                               '${nextClass!['room'] ?? 'TBA'} • ${_formatScheduleTime(nextClass!['schedule'])}',
                               nextClass!['schedule'] ?? '',
-                              DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                              DateFormat(
+                                'EEEE, MMMM d, yyyy',
+                              ).format(DateTime.now()),
                               _formatDuration(nextClassTimeLeft),
-                              false, // is next class
+                              false,
                             )
                           else
                             _buildNoClassCard('No upcoming class today'),
@@ -529,55 +568,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               );
             } else if (index == 2) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const QrScreen(),
-                ),
-              );
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(builder: (context) => const QrScreen()),
+                  )
+                  .then((_) => _loadSchedules());
             } else if (index == 3) {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const SectionsScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SectionsScreen()),
               );
             } else if (index == 4) {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
               );
             }
           },
           items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
             BottomNavigationBarItem(
               icon: Icon(Icons.assignment),
               label: 'Attendance',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code),
-              label: 'QR',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.qr_code), label: 'QR'),
             BottomNavigationBarItem(
               icon: Icon(Icons.groups),
               label: 'Sections',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profile',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildOverviewCard(String title, String value, IconData icon, Color color) {
+  Widget _buildOverviewCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(14), // Reduced from 16 to 14
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -590,9 +621,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Prevent overflow
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, // Distribute space evenly
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
             padding: const EdgeInsets.all(6),
@@ -600,11 +631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Icon(
-              icon,
-              color: Colors.black,
-              size: 18, // Reduced from 20 to 18
-            ),
+            child: Icon(icon, color: Colors.black, size: 18),
           ),
           Flexible(
             child: Center(
@@ -615,7 +642,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
-                    fontSize: 20, // Reduced from 22 to 20
+                    fontSize: 20,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -628,7 +655,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.black,
                 fontWeight: FontWeight.w500,
-                fontSize: 11, // Reduced from 12 to 11
+                fontSize: 11,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,
@@ -641,121 +668,164 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildClassCard(
-    String course, 
+    String course,
     String code,
-    String location, 
+    String location,
     String schedule,
-    String date, 
-    String countdown, 
-    bool isCurrent
+    String date,
+    String countdown,
+    bool isCurrent,
   ) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isCurrent 
-            ? [const Color(0xFF1E3A8A), const Color(0xFF3B82F6)]
-            : [const Color(0xFF3B82F6), const Color(0xFF60A5FA)],
+          colors: isCurrent
+              ? [const Color(0xFF1E3A8A), const Color(0xFF3B82F6)]
+              : [const Color(0xFF3B82F6), const Color(0xFF60A5FA)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: (isCurrent ? const Color(0xFF1E3A8A) : const Color(0xFF3B82F6)).withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+            color:
+                (isCurrent ? const Color(0xFF1E3A8A) : const Color(0xFF3B82F6))
+                    .withOpacity(0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.schedule,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
                   isCurrent ? 'Current Class' : 'Next Class',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  date,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  course,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  code,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  location,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  schedule,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              countdown,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
               ),
-            ),
+              if (isCurrent)
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.timer_outlined,
+                      color: Colors.white70,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      countdown,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.class_outlined,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      course,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          code,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 6),
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.5),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            location.split('•')[0].trim(),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          schedule,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -764,45 +834,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildNoClassCard(String message) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF60A5FA), Color(0xFF93C5FD)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF60A5FA).withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.event_busy,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+          Icon(Icons.event_busy, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../services/session_state.dart';
 import 'dart:convert';
 import 'attendance_screen.dart';
 import 'dashboard_screen.dart';
@@ -583,12 +584,38 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
     }
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // Restore session state if active
+    if (SessionState.instance.isActive) {
+      _isSessionActive = true;
+      _sessionStartTime = SessionState.instance.startTime;
+      _cutoffTime = SessionState.instance.cutoffTime != null
+          ? TimeOfDay.fromDateTime(SessionState.instance.cutoffTime!)
+          : null;
+    }
+  }
+
   void _startSession() {
     setState(() {
-      _sessionId = _uuid.v4();
-      _sessionStartTime = DateTime.now();
       _isSessionActive = true;
+      _sessionStartTime = DateTime.now();
+      _sessionId = _uuid.v4();
     });
+
+    // Update global session state
+    SessionState.instance.startSession(widget.schedule, _sessionStartTime!);
+    if (_cutoffTime != null) {
+      final now = DateTime.now();
+      SessionState.instance.cutoffTime = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        _cutoffTime!.hour,
+        _cutoffTime!.minute,
+      );
+    }
     _showQrCode();
   }
 
@@ -991,45 +1018,65 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
 
   Widget _buildActiveSession() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.shade200),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.green,
+                  color: Colors.green.shade50,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check, color: Colors.white, size: 20),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.green.shade600,
+                  size: 24,
+                ),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Session Active',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Session Active',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E3A8A),
+                      ),
+                    ),
+                    if (_sessionStartTime != null)
+                      Text(
+                        'Started at ${_formatTime(_sessionStartTime!)}',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: _showQrCode,
               icon: const Icon(Icons.qr_code, color: Colors.white),
               label: const Text(
-                'Generate QR Code',
+                'Show QR Code',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -1040,15 +1087,16 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                 backgroundColor: const Color(0xFF1E3A8A),
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
+                elevation: 0,
               ),
             ),
           ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: TextButton.icon(
               onPressed: () {
                 setState(() {
                   _isSessionActive = false;
@@ -1056,21 +1104,25 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                   _sessionStartTime = null;
                   _cutoffTime = null;
                 });
+                SessionState.instance.endSession();
               },
-              icon: const Icon(Icons.stop, color: Colors.red),
-              label: const Text(
+              icon: Icon(
+                Icons.stop_circle_outlined,
+                color: Colors.red.shade600,
+              ),
+              label: Text(
                 'End Session',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.red.shade600,
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red, width: 2),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.red.shade50,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
               ),
             ),
