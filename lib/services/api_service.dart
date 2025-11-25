@@ -674,6 +674,77 @@ class ApiService {
     }
   }
 
+  /// Get schedules for a specific instructor
+  /// Fetches all schedules and filters by instructor ID
+  Future<Map<String, dynamic>> getInstructorSchedules(
+    String instructorId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+
+      if (token == null) {
+        return {
+          'success': false,
+          'error': 'Not authenticated. Please login again.',
+        };
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/schedules';
+      print('🌐 Fetching all schedules from: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      print('📊 Response Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> allSchedules = json.decode(response.body);
+        print('🔍 Total schedules received: ${allSchedules.length}');
+
+        // Filter schedules for the current instructor
+        final instructorSchedules = allSchedules.where((schedule) {
+          final scheduleInstructor = schedule['instructor'];
+          if (scheduleInstructor == null) return false;
+
+          final id = scheduleInstructor['id'];
+          return id.toString() == instructorId;
+        }).toList();
+
+        print(
+          '🔍 Schedules for instructor $instructorId: ${instructorSchedules.length}',
+        );
+
+        return {'success': true, 'data': instructorSchedules};
+      } else if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'error': 'Session expired. Please login again.',
+        };
+      } else if (response.statusCode == 403) {
+        return {'success': false, 'error': 'Access denied.'};
+      } else if (response.statusCode == 404) {
+        return {'success': true, 'data': []};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to load schedules: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getInstructorSchedules: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
   /// Get students for a specific section
   /// This gets ALL students in a section
   Future<Map<String, dynamic>> getSectionStudents(

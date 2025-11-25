@@ -242,18 +242,24 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1E3A8A), // Deep blue
-              Color(0xFF3B82F6), // Blue
-              Color(0xFF60A5FA), // Light blue
-            ],
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [
+                    const Color(0xFF1E3A8A), // Deep blue
+                    const Color(0xFF3B82F6), // Blue
+                    const Color(0xFF60A5FA), // Light blue
+                  ],
           ),
         ),
         child: SafeArea(
@@ -290,9 +296,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               // Main Content
               Expanded(
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.only(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(25),
                       topRight: Radius.circular(25),
                     ),
@@ -360,17 +368,23 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: isDark
+                                        ? const Color(0xFF1E293B)
+                                        : Colors.white,
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: Colors.grey[300]!,
+                                      color: isDark
+                                          ? const Color(0xFF334155)
+                                          : Colors.grey[300]!,
                                     ),
                                   ),
                                   child: Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.calendar_today_rounded,
-                                        color: Color(0xFF1E3A8A),
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF1E3A8A),
                                         size: 24,
                                       ),
                                       const SizedBox(width: 12),
@@ -379,11 +393,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            const Text(
+                                            Text(
                                               'Session',
                                               style: TextStyle(
                                                 fontSize: 14,
-                                                color: Colors.grey,
+                                                color: isDark
+                                                    ? Colors.grey[400]
+                                                    : Colors.grey,
                                               ),
                                             ),
                                             const SizedBox(height: 4),
@@ -391,6 +407,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                               value: _selectedSessionId,
                                               isExpanded: true,
                                               underline: const SizedBox(),
+                                              dropdownColor: isDark
+                                                  ? const Color(0xFF1E293B)
+                                                  : Colors.white,
+                                              iconEnabledColor: isDark
+                                                  ? Colors.white
+                                                  : Colors.grey[700],
                                               items: _sessions.map((session) {
                                                 final sessionDate = _formatDate(
                                                   session['sessionDate']
@@ -406,10 +428,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                                   value: session['id'],
                                                   child: Text(
                                                     '$subjectName - $sessionDate',
-                                                    style: const TextStyle(
+                                                    style: TextStyle(
                                                       fontWeight:
                                                           FontWeight.bold,
-                                                      color: Colors.black87,
+                                                      color: isDark
+                                                          ? Colors.white
+                                                          : Colors.black87,
                                                     ),
                                                   ),
                                                 );
@@ -435,10 +459,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: isDark
+                                        ? const Color(0xFF1E293B)
+                                        : Colors.white,
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: Colors.grey[300]!,
+                                      color: isDark
+                                          ? const Color(0xFF334155)
+                                          : Colors.grey[300]!,
                                     ),
                                   ),
                                   child: Column(
@@ -451,10 +479,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                             _sessionData!['scheduleTitle']
                                                 ?.toString() ??
                                             'Unknown Subject',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E3A8A),
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E3A8A),
                                         ),
                                       ),
                                       const SizedBox(height: 8),
@@ -463,7 +493,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                           'Section: ${_sessionData!['sectionName']}',
                                           style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[600],
+                                            color: isDark
+                                                ? Colors.grey[400]
+                                                : Colors.grey[600],
                                           ),
                                         ),
                                       if (_sessionData!['sessionDate'] !=
@@ -473,7 +505,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                           'Date: ${_formatDate(_sessionData!['sessionDate']?.toString())}',
                                           style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[600],
+                                            color: isDark
+                                                ? Colors.grey[400]
+                                                : Colors.grey[600],
                                           ),
                                         ),
                                       ],
@@ -551,16 +585,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                         .headlineSmall
                                         ?.copyWith(
                                           fontWeight: FontWeight.bold,
-                                          color: const Color(0xFF1E3A8A),
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E3A8A),
                                           fontSize: 20,
                                         ),
                                   ),
                                   const Spacer(),
                                   IconButton(
                                     onPressed: _showSortSheet,
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.sort,
-                                      color: Color(0xFF1E3A8A),
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1E3A8A),
                                       size: 24,
                                     ),
                                     splashRadius: 22,
@@ -654,7 +692,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -664,11 +702,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1E3A8A),
-          unselectedItemColor: Colors.grey,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          selectedItemColor: isDark ? Colors.white : const Color(0xFF1E3A8A),
+          unselectedItemColor: isDark ? Colors.grey[400] : Colors.grey,
           type: BottomNavigationBarType.fixed,
           currentIndex: 1, // Attendance tab selected
+          selectedFontSize: 12,
+          unselectedFontSize: 12,
+          iconSize: 24,
           onTap: (index) {
             if (index == 0) {
               Navigator.of(context).pushReplacement(
@@ -679,7 +720,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             } else if (index == 2) {
               Navigator.of(
                 context,
-              ).push(MaterialPageRoute(builder: (context) => QrScreen()));
+              ).push(MaterialPageRoute(builder: (context) => const QrScreen()));
             } else if (index == 3) {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (context) => const SectionsScreen()),
@@ -769,14 +810,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final checkInTime = record['checkInTime']?.toString();
     final attendanceId = record['attendanceRecordId'] ?? record['id'];
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF1E3A8A).withOpacity(0.1),
+          color: isDark
+              ? const Color(0xFF334155)
+              : const Color(0xFF1E3A8A).withOpacity(0.1),
           width: 1.5,
         ),
         boxShadow: [
@@ -811,9 +856,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               children: [
                 Text(
                   studentName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A8A),
+                    color: isDark ? Colors.white : const Color(0xFF1E3A8A),
                     fontSize: 15,
                     letterSpacing: 0.2,
                   ),
@@ -822,7 +867,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 Text(
                   studentNumber,
                   style: TextStyle(
-                    color: Colors.grey[600],
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1003,12 +1048,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isSelected ? color.withOpacity(0.1) : Colors.grey[50],
+              color: isSelected
+                  ? color.withOpacity(0.1)
+                  : (Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF1E293B)
+                        : Colors.grey[50]),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isSelected
                     ? color.withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.2),
+                    : (Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF334155)
+                          : Colors.grey.withOpacity(0.2)),
                 width: isSelected ? 2 : 1,
               ),
             ),
@@ -1024,7 +1075,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   child: Text(
                     label,
                     style: TextStyle(
-                      color: isSelected ? color : Colors.grey[800],
+                      color: isSelected
+                          ? color
+                          : (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.grey[800]),
                       fontWeight: isSelected
                           ? FontWeight.bold
                           : FontWeight.w600,
@@ -1048,7 +1103,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF1E293B)
+          : Colors.white,
       builder: (context) {
         return SafeArea(
           child: Container(

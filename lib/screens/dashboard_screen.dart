@@ -6,6 +6,9 @@ import 'qr_screen.dart';
 import 'sections_screen.dart';
 import '../services/api_service.dart';
 import '../services/session_state.dart';
+import '../services/settings_service.dart';
+import '../services/storage_service.dart';
+import 'login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -48,39 +51,111 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _errorMessage = null;
     });
 
-    final result = await _apiService.getInstructorSections();
+    try {
+      final instructorId = await StorageService.getInstructorId();
 
-    if (result['success']) {
-      // Extract all schedules from grouped sections
-      List<Map<String, dynamic>> allSchedules = [];
-      final groupedSections = result['data'] as Map<String, dynamic>;
-
-      _groupedSections = groupedSections;
-
-      // Calculate stats
-      _totalSections = groupedSections.keys.length;
-      _totalSubjects = 0;
-
-      for (var subjects in groupedSections.values) {
-        final subjectList = List<Map<String, dynamic>>.from(subjects);
-        _totalSubjects += subjectList.length;
-        allSchedules.addAll(subjectList);
+      if (instructorId == null) {
+        setState(() {
+          _errorMessage = 'Instructor ID not found. Please login again.';
+          _isLoading = false;
+        });
+        return;
       }
 
-      // Load student count
-      await _loadStudentCount();
+      final result = await _apiService.getInstructorSchedules(instructorId);
 
-      _findCurrentAndNextClass(allSchedules);
+      if (result['success']) {
+        // Extract all schedules from the list
+        List<Map<String, dynamic>> allSchedules = [];
+        final List<dynamic> schedulesData = result['data'] as List<dynamic>;
 
+        // Group by section for the stats
+        Map<String, List<Map<String, dynamic>>> groupedSections = {};
+
+        for (var item in schedulesData) {
+          // Adapt the item structure to our needs
+
+          // Extract section info
+          var sectionData = item['section'];
+          String sectionName = sectionData?['name'] ?? 'Unknown';
+          int sectionId = sectionData?['id'] ?? 0;
+
+          // Initialize section if not exists
+          if (!groupedSections.containsKey(sectionName)) {
+            groupedSections[sectionName] = [];
+          }
+
+          // Extract subject info
+          var subjectData = item['subject'];
+          String subjectName = subjectData?['name'] ?? 'Unknown Subject';
+          String subjectCode = subjectData?['code'] ?? 'N/A';
+          int subjectId = subjectData?['id'] ?? 0;
+
+          // Extract classroom info
+          var classroomData = item['classroom'];
+          String room = classroomData?['name'] ?? '';
+
+          // Extract schedule time
+          String timeIn = item['timeIn'] ?? '';
+          String timeOut = item['timeOut'] ?? '';
+          String dayOfWeek = item['dayOfWeek'] ?? '';
+
+          String scheduleStr = '';
+          if (dayOfWeek.isNotEmpty && timeIn.isNotEmpty && timeOut.isNotEmpty) {
+            String formattedTimeIn = timeIn.length >= 5
+                ? timeIn.substring(0, 5)
+                : timeIn;
+            String formattedTimeOut = timeOut.length >= 5
+                ? timeOut.substring(0, 5)
+                : timeOut;
+            scheduleStr = '$dayOfWeek $formattedTimeIn-$formattedTimeOut';
+          }
+
+          final scheduleItem = {
+            'sectionId': sectionId,
+            'sectionName': sectionName,
+            'subjectId': subjectId,
+            'subjectName': subjectName,
+            'subjectCode': subjectCode,
+            'name': subjectName,
+            'code': subjectCode,
+            'schedule': scheduleStr,
+            'room': room,
+            'scheduleId': item['id'],
+            'startDateTime': null, // Will be calculated
+            'endDateTime': null, // Will be calculated
+          };
+
+          groupedSections[sectionName]!.add(scheduleItem);
+          allSchedules.add(scheduleItem);
+        }
+
+        _groupedSections = groupedSections;
+
+        // Calculate stats
+        _totalSections = groupedSections.keys.length;
+        _totalSubjects = allSchedules.length;
+
+        // Load student count
+        await _loadStudentCount();
+
+        _findCurrentAndNextClass(allSchedules);
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Start countdown timer
+        _startCountdown();
+      } else {
+        setState(() {
+          _errorMessage = result['error'] ?? 'Failed to load schedules';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
       setState(() {
-        _isLoading = false;
-      });
-
-      // Start countdown timer
-      _startCountdown();
-    } else {
-      setState(() {
-        _errorMessage = result['error'] ?? 'Failed to load schedules';
+        _errorMessage = 'Error loading data: $e';
         _isLoading = false;
       });
     }
@@ -303,45 +378,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  String _formatScheduleTime(String? schedule) {
-    if (schedule == null || schedule.isEmpty) return '';
-
-    final parts = schedule.split(' ');
-    if (parts.length < 2) return '';
-
-    final timeRange = parts[1];
-    final times = timeRange.split('-');
-    if (times.isEmpty) return '';
-
-    try {
-      final time = _parseTime(times[0]);
-      final hour = time.hour;
-      final minute = time.minute;
-      final period = hour >= 12 ? 'PM' : 'AM';
-      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-      return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period';
-    } catch (e) {
-      return times[0];
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEyeProtection = SettingsService.instance.isEyeProtectionMode;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6), Color(0xFF60A5FA)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [const Color(0xFF1E3A8A), const Color(0xFF3B82F6)],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
               // Header
-              Container(
+              Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
@@ -349,37 +406,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'lib/images/aclc_logo.png',
                       width: 50,
                       height: 50,
-                      fit: BoxFit.contain,
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
+                    const Expanded(
                       child: Text(
                         'Teacher Dashboard',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24,
-                            ),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                        ),
                       ),
                     ),
-                    const Icon(
-                      Icons.notifications_outlined,
-                      color: Colors.white,
-                      size: 28,
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        onPressed: () {},
+                        icon: const Icon(
+                          Icons.notifications_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              // Main Content
+              // Content
               Expanded(
                 child: Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(25),
-                      topRight: Radius.circular(25),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
                     ),
                   ),
                   child: SingleChildScrollView(
@@ -387,56 +453,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Overview Section Header
                         Text(
                           'Overview',
                           style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: const Color(0xFF1E3A8A),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF1E3A8A),
                                 fontSize: 20,
                               ),
                         ),
                         const SizedBox(height: 16),
-
-                        GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.3,
+                        // Overview Cards - 2x2 Grid
+                        Column(
                           children: [
-                            _buildOverviewCard(
-                              'Sections',
-                              _isLoading ? '...' : '$_totalSections',
-                              Icons.school,
-                              const Color(0xFF3B82F6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildOverviewCard(
+                                    'Sections',
+                                    _totalSections.toString(),
+                                    Icons.class_outlined,
+                                    const Color(0xFF3B82F6),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildOverviewCard(
+                                    'Subjects',
+                                    _totalSubjects.toString(),
+                                    Icons.book_outlined,
+                                    const Color(0xFF8B5CF6),
+                                  ),
+                                ),
+                              ],
                             ),
-                            _buildOverviewCard(
-                              'Subjects',
-                              _isLoading ? '...' : '$_totalSubjects',
-                              Icons.book,
-                              const Color(0xFF10B981),
-                            ),
-                            _buildOverviewCard(
-                              'Students',
-                              _isLoading ? '...' : '$_totalStudents',
-                              Icons.people,
-                              const Color(0xFF8B5CF6),
-                            ),
-                            _buildOverviewCard(
-                              'Classes',
-                              _isLoading
-                                  ? '...'
-                                  : '${_totalSubjects > 0 ? _totalSubjects : "0"}',
-                              Icons.class_,
-                              const Color(0xFFF59E0B),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildOverviewCard(
+                                    'Students',
+                                    _totalStudents.toString(),
+                                    Icons.people_outline,
+                                    const Color(0xFF10B981),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildOverviewCard(
+                                    'Classes',
+                                    _totalSubjects.toString(),
+                                    Icons.school_outlined,
+                                    const Color(0xFFF59E0B),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
+                        const SizedBox(height: 24),
 
-                        const SizedBox(height: 20),
-
+                        // Schedule Section
                         if (_isLoading)
                           const Center(
                             child: Padding(
@@ -485,7 +565,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1E3A8A),
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E3A8A),
                                   fontSize: 20,
                                 ),
                           ),
@@ -513,7 +595,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1E3A8A),
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF1E3A8A),
                                   fontSize: 20,
                                 ),
                           ),
@@ -545,7 +629,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -555,9 +639,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1E3A8A),
-          unselectedItemColor: Colors.grey,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          selectedItemColor: const Color(0xFF3B82F6),
+          unselectedItemColor: isDark ? Colors.grey[400] : Colors.grey,
           type: BottomNavigationBarType.fixed,
           currentIndex: 0,
           onTap: (index) {
@@ -599,6 +683,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  String _formatScheduleTime(String? schedule) {
+    if (schedule == null || schedule.isEmpty) return '';
+
+    final parts = schedule.split(' ');
+    if (parts.length < 2) return '';
+
+    final timeRange = parts[1];
+    final times = timeRange.split('-');
+    if (times.isEmpty) return '';
+
+    try {
+      final time = _parseTime(times[0]);
+      final hour = time.hour;
+      final minute = time.minute;
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $period';
+    } catch (e) {
+      return times[0];
+    }
   }
 
   Widget _buildOverviewCard(

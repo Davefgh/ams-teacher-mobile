@@ -8,6 +8,9 @@ import 'attendance_screen.dart';
 import 'dashboard_screen.dart';
 import 'profile_screen.dart';
 import 'sections_screen.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
+import 'package:intl/intl.dart';
 
 class QrScreen extends StatefulWidget {
   const QrScreen({super.key});
@@ -18,41 +21,140 @@ class QrScreen extends StatefulWidget {
 
 class _QrScreenState extends State<QrScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ApiService _apiService = ApiService();
+
   String? _selectedSchedule;
   DateTime _selectedDate = DateTime.now();
+  bool _isLoading = false;
+  String? _errorMessage;
+  List<Map<String, dynamic>> _schedules = [];
 
-  // Mock schedules
-  final List<Map<String, dynamic>> _schedules = [
-    {
-      'code': 'CS31A',
-      'name': 'Software Engineering 1',
-      'time': '9:00 AM - 10:30 AM',
-      'room': 'Room 301',
-      'day': 'Today',
-      'instructor': 'Jovelyn Comaingking',
-    },
-    {
-      'code': 'CS11A',
-      'name': 'Computing Programming 1',
-      'time': '10:00 AM - 11:30 AM',
-      'room': 'Room 304',
-      'day': 'Wed, Oct 30',
-      'instructor': 'Jovelyn Comaingking',
-    },
-    {
-      'code': 'IT21B',
-      'name': 'Information Assurance',
-      'time': '9:15 AM',
-      'room': 'Room 302',
-      'day': 'Today',
-      'instructor': 'Jovelyn Comaingking',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadSchedules();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSchedules() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final instructorId = await StorageService.getInstructorId();
+      if (instructorId == null) {
+        setState(() {
+          _errorMessage = 'Instructor ID not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final result = await _apiService.getInstructorSchedules(instructorId);
+
+      if (result['success']) {
+        final List<dynamic> data = result['data'];
+        final List<Map<String, dynamic>> loadedSchedules = [];
+
+        // Get day name for selected date (e.g., "Monday")
+        final dayName = DateFormat('EEEE').format(_selectedDate);
+
+        for (var item in data) {
+          // Check if schedule matches selected day
+          final String scheduleDay = item['dayOfWeek'] ?? '';
+          if (scheduleDay != dayName) continue;
+
+          // Extract time info
+          final String timeIn = item['timeIn'] ?? '';
+          final String timeOut = item['timeOut'] ?? '';
+
+          String timeStr = '';
+          if (timeIn.isNotEmpty && timeOut.isNotEmpty) {
+            String formattedTimeIn = timeIn.length >= 5
+                ? timeIn.substring(0, 5)
+                : timeIn;
+            String formattedTimeOut = timeOut.length >= 5
+                ? timeOut.substring(0, 5)
+                : timeOut;
+
+            // Convert to AM/PM for display
+            try {
+              final inParts = formattedTimeIn.split(':');
+              final outParts = formattedTimeOut.split(':');
+
+              if (inParts.length >= 2 && outParts.length >= 2) {
+                final inTime = TimeOfDay(
+                  hour: int.parse(inParts[0]),
+                  minute: int.parse(inParts[1]),
+                );
+                final outTime = TimeOfDay(
+                  hour: int.parse(outParts[0]),
+                  minute: int.parse(outParts[1]),
+                );
+
+                final inPeriod = inTime.hour >= 12 ? 'PM' : 'AM';
+                final inHour = inTime.hour > 12
+                    ? inTime.hour - 12
+                    : (inTime.hour == 0 ? 12 : inTime.hour);
+
+                final outPeriod = outTime.hour >= 12 ? 'PM' : 'AM';
+                final outHour = outTime.hour > 12
+                    ? outTime.hour - 12
+                    : (outTime.hour == 0 ? 12 : outTime.hour);
+
+                timeStr =
+                    '$inHour:${inTime.minute.toString().padLeft(2, '0')} $inPeriod - $outHour:${outTime.minute.toString().padLeft(2, '0')} $outPeriod';
+              } else {
+                timeStr = '$formattedTimeIn - $formattedTimeOut';
+              }
+            } catch (e) {
+              timeStr = '$formattedTimeIn - $formattedTimeOut';
+            }
+          }
+
+          loadedSchedules.add({
+            'id': item['id'],
+            'code': item['subject']?['code'] ?? 'N/A',
+            'name': item['subject']?['name'] ?? 'Unknown Subject',
+            'time': timeStr,
+            'room': item['classroom']?['name'] ?? 'TBA',
+            'day': scheduleDay,
+            'instructor':
+                ('${item['instructor']?['firstname'] ?? ''} ${item['instructor']?['lastname'] ?? ''}'
+                        .trim())
+                    .isEmpty
+                ? 'Unknown Instructor'
+                : '${item['instructor']?['firstname'] ?? ''} ${item['instructor']?['lastname'] ?? ''}'
+                      .trim(),
+            'section': item['section']?['name'] ?? '',
+            // Keep original data for session creation
+            'original_data': item,
+          });
+        }
+
+        setState(() {
+          _schedules = loadedSchedules;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['error'] ?? 'Failed to load schedules';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   String _getFormattedDate() {
@@ -63,37 +165,9 @@ class _QrScreenState extends State<QrScreen> {
         _selectedDate.day == now.day;
 
     if (isToday) {
-      final monthNames = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return 'Today, ${monthNames[now.month - 1]} ${now.day}';
+      return 'Today, ${DateFormat('MMM d').format(now)}';
     } else {
-      final monthNames = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${monthNames[_selectedDate.month - 1]} ${_selectedDate.day}, ${_selectedDate.year}';
+      return DateFormat('MMM d, yyyy').format(_selectedDate);
     }
   }
 
@@ -139,6 +213,7 @@ class _QrScreenState extends State<QrScreen> {
                     _selectedDate = selectedDay;
                   });
                   Navigator.pop(context);
+                  _loadSchedules(); // Reload schedules for new date
                 },
                 calendarStyle: CalendarStyle(
                   selectedDecoration: const BoxDecoration(
@@ -196,28 +271,58 @@ class _QrScreenState extends State<QrScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDateSelector(),
-                    const SizedBox(height: 24),
-                    _buildSearchBar(),
-                    const SizedBox(height: 24),
-                    _buildSchedulesList(),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [
+                    const Color(0xFF1E3A8A),
+                    const Color(0xFF3B82F6),
+                    const Color(0xFF60A5FA),
                   ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
+                    ),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildDateSelector(),
+                        const SizedBox(height: 24),
+                        _buildSearchBar(),
+                        const SizedBox(height: 24),
+                        _buildSchedulesList(),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomNav(),
@@ -225,15 +330,8 @@ class _QrScreenState extends State<QrScreen> {
   }
 
   Widget _buildHeader() {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
       child: Row(
         children: [
           Image.asset(
@@ -350,6 +448,64 @@ class _QrScreenState extends State<QrScreen> {
   }
 
   Widget _buildSchedulesList() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40.0),
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E3A8A)),
+          ),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            children: [
+              Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadSchedules,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E3A8A),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_schedules.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40.0),
+          child: Column(
+            children: [
+              Icon(Icons.event_busy, size: 48, color: Colors.grey[300]),
+              const SizedBox(height: 16),
+              Text(
+                'No schedules found for this date',
+                style: TextStyle(color: Colors.grey[500], fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -449,13 +605,38 @@ class _QrScreenState extends State<QrScreen> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    schedule['day'],
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF1E3A8A),
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        schedule['day'],
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF1E3A8A),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (schedule['section'] != null &&
+                          schedule['section'].isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            schedule['section'],
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -484,9 +665,11 @@ class _QrScreenState extends State<QrScreen> {
   }
 
   Widget _buildBottomNav() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
@@ -496,11 +679,14 @@ class _QrScreenState extends State<QrScreen> {
         ],
       ),
       child: BottomNavigationBar(
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF1E3A8A),
-        unselectedItemColor: Colors.grey,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        selectedItemColor: isDark ? Colors.white : const Color(0xFF1E3A8A),
+        unselectedItemColor: isDark ? Colors.grey[400] : Colors.grey,
         type: BottomNavigationBarType.fixed,
         currentIndex: 2,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        iconSize: 24,
         onTap: (index) {
           if (index == 0) {
             Navigator.of(context).pushReplacement(
@@ -700,7 +886,10 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                     const SizedBox(height: 8),
                     _buildQrDetailRow(
                       Icons.person,
-                      widget.schedule['instructor'] ?? 'Unknown Instructor',
+                      (widget.schedule['instructor']?.toString().isNotEmpty ==
+                              true)
+                          ? widget.schedule['instructor']
+                          : 'Unknown Instructor',
                     ),
                     if (_sessionStartTime != null) ...[
                       const SizedBox(height: 8),
@@ -835,7 +1024,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.schedule['code'],
+            widget.schedule['name'],
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -844,8 +1033,8 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            widget.schedule['name'],
-            style: const TextStyle(fontSize: 16, color: Colors.black87),
+            widget.schedule['code'],
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
           const Divider(height: 24),
           _buildInfoRow(Icons.access_time, widget.schedule['time']),
@@ -854,7 +1043,9 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           const SizedBox(height: 12),
           _buildInfoRow(
             Icons.person,
-            widget.schedule['instructor'] ?? 'Unknown Instructor',
+            (widget.schedule['instructor']?.toString().isNotEmpty == true)
+                ? widget.schedule['instructor']
+                : 'Unknown Instructor',
           ),
         ],
       ),

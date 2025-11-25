@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/responsive_utils.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import 'dashboard_screen.dart';
 import 'attendance_screen.dart';
 import 'qr_screen.dart';
@@ -33,25 +34,78 @@ class _SectionsScreenState extends State<SectionsScreen> {
       _errorMessage = null;
     });
 
-    final result = await _apiService.getInstructorSections();
+    try {
+      final instructorId = await StorageService.getInstructorId();
 
-    if (result['success']) {
+      if (instructorId == null) {
+        setState(() {
+          _errorMessage = 'Instructor ID not found. Please login again.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final result = await _apiService.getInstructorSchedules(instructorId);
+
+      if (result['success']) {
+        final List<dynamic> schedulesData = result['data'] as List<dynamic>;
+
+        // Group by section
+        Map<String, List<Map<String, dynamic>>> groupedSections = {};
+
+        for (var item in schedulesData) {
+          // Extract section info
+          var sectionData = item['section'];
+          String sectionName = sectionData?['name'] ?? 'Unknown';
+          int sectionId = sectionData?['id'] ?? 0;
+
+          // Initialize section if not exists
+          if (!groupedSections.containsKey(sectionName)) {
+            groupedSections[sectionName] = [];
+          }
+
+          // Extract subject info
+          var subjectData = item['subject'];
+          String subjectName = subjectData?['name'] ?? 'Unknown Subject';
+          String subjectCode = subjectData?['code'] ?? 'N/A';
+          int subjectId = subjectData?['id'] ?? 0;
+
+          final subjectItem = {
+            'sectionId': sectionId,
+            'sectionName': sectionName,
+            'subjectId': subjectId,
+            'name': subjectName, // Used in UI
+            'code': subjectCode,
+            'id': subjectId,
+          };
+
+          // Avoid duplicates if multiple schedules exist for same subject/section
+          // Check if this subject is already added to this section
+          bool exists = groupedSections[sectionName]!.any(
+            (s) => s['subjectId'] == subjectId,
+          );
+          if (!exists) {
+            groupedSections[sectionName]!.add(subjectItem);
+          }
+        }
+
+        setState(() {
+          _groupedSections = groupedSections;
+          // Initialize all programs as collapsed
+          _expandedPrograms = {
+            for (var program in _groupedSections.keys) program: false,
+          };
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['error'] ?? 'Failed to load sections';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
       setState(() {
-        _groupedSections = Map<String, List<Map<String, dynamic>>>.from(
-          result['data'].map(
-            (key, value) =>
-                MapEntry(key, List<Map<String, dynamic>>.from(value)),
-          ),
-        );
-        // Initialize all programs as collapsed
-        _expandedPrograms = {
-          for (var program in _groupedSections.keys) program: false,
-        };
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _errorMessage = result['error'] ?? 'Failed to load sections';
+        _errorMessage = 'Error loading sections: $e';
         _isLoading = false;
       });
     }
@@ -59,14 +113,24 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6), Color(0xFF60A5FA)],
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [
+                    const Color(0xFF1E3A8A),
+                    const Color(0xFF3B82F6),
+                    const Color(0xFF60A5FA),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -378,6 +442,7 @@ class _SectionsScreenState extends State<SectionsScreen> {
   }
 
   Widget _buildSectionCard(BuildContext context, Map<String, dynamic> section) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Get icon and color based on subject name
     final iconData = _getSubjectIcon(section['name']);
     final color = _getSubjectColor(section['name']);
@@ -398,7 +463,7 @@ class _SectionsScreenState extends State<SectionsScreen> {
         ),
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
@@ -572,9 +637,11 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   Widget _buildResponsiveBottomNav(BuildContext context) {
     if (ResponsiveUtils.isMobile(context)) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -584,11 +651,14 @@ class _SectionsScreenState extends State<SectionsScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1E3A8A),
-          unselectedItemColor: Colors.grey,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          selectedItemColor: isDark ? Colors.white : const Color(0xFF1E3A8A),
+          unselectedItemColor: isDark ? Colors.grey[400] : Colors.grey,
           type: BottomNavigationBarType.fixed,
           currentIndex: 3,
+          selectedFontSize: 12,
+          unselectedFontSize: 12,
+          iconSize: 24,
           onTap: (index) => _handleNavigation(context, index),
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),

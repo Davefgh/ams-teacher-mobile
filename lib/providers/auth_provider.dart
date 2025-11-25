@@ -80,7 +80,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
             final profileData = profileResponse['data'] as Map<String, dynamic>;
             String? instructorId;
 
-            if (profileData['id'] != null) {
+            if (profileData['instructorProfile'] != null) {
+              final instructorProfile = profileData['instructorProfile'];
+              if (instructorProfile['id'] != null) {
+                instructorId = instructorProfile['id'].toString();
+              }
+            } else if (profileData['id'] != null) {
               instructorId = profileData['id'].toString();
             } else if (profileData['Id'] != null) {
               instructorId = profileData['Id'].toString();
@@ -89,6 +94,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             if (instructorId != null) {
               await StorageService.saveInstructorId(instructorId);
               print('✅ Instructor ID saved: $instructorId');
+            } else {
+              print('⚠️ Instructor ID not found in profile data');
+              print('Profile Data Keys: ${profileData.keys.toList()}');
             }
           }
         } catch (profileError) {
