@@ -946,6 +946,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   String _selectedRoom = 'Room 301 (Scheduled)';
   String? _sessionId; // This is the uniqueHash for QR
   int? _currentSessionId; // This is the numeric ID for API calls
+  int? _qrCodeId; // The actual QR Code ID from backend
   DateTime? _sessionStartTime;
   TimeOfDay? _cutoffTime;
   // final Uuid _uuid = const Uuid(); // Removed unused field
@@ -980,13 +981,23 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    // Restore session state if active
-    if (SessionState.instance.isActive) {
+    // Restore session state if active AND matches this schedule
+    if (SessionState.instance.isActive &&
+        SessionState.instance.currentSchedule?['id'] == widget.schedule['id']) {
       _isSessionActive = true;
       _sessionStartTime = SessionState.instance.startTime;
       _cutoffTime = SessionState.instance.cutoffTime != null
           ? TimeOfDay.fromDateTime(SessionState.instance.cutoffTime!)
           : null;
+      _sessionId = SessionState.instance.qrHash;
+      // We might need to fetch the QR ID if it wasn't stored in SessionState
+      // For now, let's try to fetch it if we have the session ID (which we might not have easily accessible here without storing it)
+      // Actually, let's just call _checkExistingSession to be safe and get fresh data,
+      // but we need to be careful not to override the "active" state if the API fails.
+      // Better approach: Just call _fetchQrCodeId if we have a session running.
+      // But we don't have the numeric session ID in SessionState currently.
+      // Let's rely on _checkExistingSession to populate it.
+      _checkExistingSession();
     } else {
       _checkExistingSession();
     }
@@ -1024,18 +1035,29 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
               sessionDate.day == widget.selectedDate.day;
 
           if (isSameDate) {
-            // Check if session is active (no end time)
-            // The user provided example shows actualEndTime as null for active/new sessions
-            final isActive = latestSession['actualEndTime'] == null;
+            // Check if session is active (no end time AND status is active)
+            final status = latestSession['status']?.toString().toLowerCase();
+            final hasDeletedAt = latestSession['deletedAt'] != null;
+
+            // Strict check: Must be 'active' or 'started' if status exists.
+            // If status is null, fall back to actualEndTime check (legacy compatibility)
+            final isStatusActive = status == 'active' || status == 'started';
+
+            bool isActive;
+            if (status != null) {
+              isActive = isStatusActive && !hasDeletedAt;
+            } else {
+              isActive =
+                  latestSession['actualEndTime'] == null && !hasDeletedAt;
+            }
+
+            print(
+              '🔍 Session Check: ID=${latestSession['id']}, Status=$status, Active=$isActive',
+            );
 
             if (isActive) {
               setState(() {
                 _isSessionActive = true;
-                _sessionId =
-                    latestSession['uniqueHash'] ??
-                    latestSession['id']
-                        .toString(); // Use uniqueHash if available, else ID
-                _currentSessionId = latestSession['id'];
 
                 // Parse start time if available, else use sessionDate
                 if (latestSession['actualStartTime'] != null) {
@@ -1054,6 +1076,11 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                   _cutoffTime = TimeOfDay.fromDateTime(cutoff);
                 }
               });
+
+              // Fetch QR Code ID
+              if (_currentSessionId != null) {
+                _fetchQrCodeId(_currentSessionId!);
+              }
 
               // Update global state
               SessionState.instance.startSession(
@@ -1084,6 +1111,19 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           _isCheckingSession = false;
         });
       }
+    }
+  }
+
+  Future<void> _fetchQrCodeId(int sessionId) async {
+    try {
+      final result = await ApiService().getQrCodeBySessionId(sessionId);
+      if (result['success'] == true && result['data'] != null) {
+        setState(() {
+          _qrCodeId = result['data']['id'];
+        });
+      }
+    } catch (e) {
+      print('Error fetching QR Code ID: $e');
     }
   }
 
@@ -1172,6 +1212,9 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           _sessionStartTime = DateTime.now();
           _sessionId = uniqueHash;
           _currentSessionId = sessionId;
+          if (result['data'] != null) {
+            _qrCodeId = result['data']['id'];
+          }
         });
 
         SessionState.instance.startSession(
@@ -1207,7 +1250,9 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
       final errorMessage = e.toString();
       if (errorMessage.contains('already exists')) {
         if (mounted) {
-          _showSessionConflictDialog();
+          // Automatically handle conflict by deleting and retrying
+          // This removes the "Session Conflict" dialog as requested
+          _deleteAndRetrySession();
         }
       } else {
         if (mounted) {
@@ -1352,6 +1397,16 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                   version: QrVersions.auto,
                   size: 220,
                 ),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                'ID: ${_qrCodeId ?? "Not Generated"}',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
               Text(
@@ -1781,43 +1836,164 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _isSessionActive = false;
-                  _sessionId = null;
-                  _currentSessionId = null;
-                  _sessionStartTime = null;
-                  _cutoffTime = null;
-                });
-                SessionState.instance.endSession();
-              },
-              icon: Icon(
-                Icons.stop_circle_outlined,
-                color: Colors.red.shade600,
-              ),
-              label: Text(
-                'End Session',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.red.shade600,
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () => _confirmDeleteSession(),
+                  icon: Icon(Icons.delete_outline, color: Colors.red.shade600),
+                  label: Text(
+                    'Delete',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red.shade600,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.red.shade50,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
               ),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.red.shade50,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () => _confirmEndSession(),
+                  icon: Icon(
+                    Icons.stop_circle_outlined,
+                    color: Colors.orange.shade800,
+                  ),
+                  label: Text(
+                    'End',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    backgroundColor: Colors.orange.shade50,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteSession() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Session?'),
+        content: const Text(
+          'This will permanently remove this session and all attendance records. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && _currentSessionId != null) {
+      try {
+        final result = await ApiService().deleteSession(_currentSessionId!);
+        if (result['success'] == true) {
+          setState(() {
+            _isSessionActive = false;
+            _sessionId = null;
+            _currentSessionId = null;
+            _sessionStartTime = null;
+            _cutoffTime = null;
+            _qrCodeId = null;
+          });
+          SessionState.instance.endSession();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Session deleted successfully')),
+            );
+          }
+        } else {
+          throw Exception(result['error'] ?? 'Failed to delete session');
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmEndSession() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('End Session?'),
+        content: const Text(
+          'This will mark the session as completed. Students will no longer be able to scan the QR code.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('End Session'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && _currentSessionId != null) {
+      try {
+        final result = await ApiService().endSession(_currentSessionId!);
+        if (result['success'] == true) {
+          setState(() {
+            _isSessionActive = false;
+            _sessionId = null;
+            _currentSessionId = null;
+            _sessionStartTime = null;
+            _cutoffTime = null;
+            _qrCodeId = null;
+          });
+          SessionState.instance.endSession();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Session ended successfully')),
+            );
+          }
+        } else {
+          throw Exception(result['error'] ?? 'Failed to end session');
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 }
 

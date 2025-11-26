@@ -575,6 +575,54 @@ class ApiService {
     }
   }
 
+  /// Get QR code by session ID
+  Future<Map<String, dynamic>> getQrCodeBySessionId(
+    int sessionId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/QrCode/session/$sessionId';
+      print('🌐 Fetching QR Code by Session ID: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      print('📊 Get QR Code Response Status: ${response.statusCode}');
+      print('📝 Get QR Code Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else if (response.statusCode == 404) {
+        return {
+          'success': false,
+          'error': 'QR Code not found for this session',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch QR code: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getQrCodeBySessionId: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
   /// Get sessions by schedule ID
   Future<Map<String, dynamic>> getSessionByScheduleId(
     int scheduleId, {
@@ -852,6 +900,45 @@ class ApiService {
       }
     } catch (e) {
       print('💥 Error in getSessionsByStatus: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// End a session
+  Future<Map<String, dynamic>> endSession(
+    int sessionId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/$sessionId/end';
+      print('🌐 Ending session at: $url');
+
+      final response = await _makeRequest(
+        method: 'PATCH',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        return {'success': true};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to end session: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in endSession: $e');
       return {'success': false, 'error': 'Error: $e'};
     }
   }
