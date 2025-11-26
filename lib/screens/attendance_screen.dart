@@ -4,6 +4,7 @@ import 'profile_screen.dart';
 import 'qr_screen.dart';
 import 'sections_screen.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final int? sessionId; // Optional session ID passed from other screens
@@ -44,12 +45,60 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     });
 
     try {
-      final result = await _apiService.getSessions();
-      if (result['success'] == true) {
-        final data = result['data'];
-        if (data is List) {
+      final instructorId = await StorageService.getInstructorId();
+      if (instructorId == null) {
+        setState(() {
+          errorMessage = 'Instructor ID not found';
+          isLoadingSessions = false;
+        });
+        return;
+      }
+
+      final sessionsResult = await _apiService.getSessions();
+      final subjectsResult = await _apiService.getInstructorSubjects(
+        instructorId,
+      );
+
+      if (sessionsResult['success'] == true &&
+          subjectsResult['success'] == true) {
+        final List<dynamic> sessionsData = sessionsResult['data'];
+        final List<dynamic> subjectsData = subjectsResult['data'];
+
+        // Create a set of valid subject names for filtering
+        // Note: Sessions might not have subjectId directly, so we might need to match by name
+        // or ensure the session object has subject info.
+        // Based on previous code, session has 'subjectName'.
+        final validSubjectNames = subjectsData
+            .map((s) => s['name'].toString().toLowerCase())
+            .toSet();
+
+        if (sessionsData.isNotEmpty) {
+          final List<Map<String, dynamic>> allSessions =
+              List<Map<String, dynamic>>.from(sessionsData);
+
+          // Filter sessions
+          final filteredSessions = allSessions.where((session) {
+            final subjectName = session['subjectName']
+                ?.toString()
+                .toLowerCase();
+            final scheduleTitle = session['scheduleTitle']
+                ?.toString()
+                .toLowerCase();
+
+            // Check if subject name or schedule title matches any valid subject
+            if (subjectName != null &&
+                validSubjectNames.contains(subjectName)) {
+              return true;
+            }
+            if (scheduleTitle != null &&
+                validSubjectNames.contains(scheduleTitle)) {
+              return true;
+            }
+            return false;
+          }).toList();
+
           setState(() {
-            _sessions = List<Map<String, dynamic>>.from(data);
+            _sessions = filteredSessions;
             if (_sessions.isNotEmpty && _selectedSessionId == null) {
               // Select first session if none selected
               _selectedSessionId = _sessions[0]['id'];
@@ -59,7 +108,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         }
       } else {
         setState(() {
-          errorMessage = result['error'] ?? 'Failed to load sessions';
+          errorMessage =
+              sessionsResult['error'] ??
+              subjectsResult['error'] ??
+              'Failed to load data';
         });
       }
     } catch (e) {

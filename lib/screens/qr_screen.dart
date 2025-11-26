@@ -28,6 +28,7 @@ class _QrScreenState extends State<QrScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   List<Map<String, dynamic>> _schedules = [];
+  Map<int, Map<String, dynamic>> _activeSessions = {};
 
   @override
   void initState() {
@@ -57,19 +58,38 @@ class _QrScreenState extends State<QrScreen> {
         return;
       }
 
-      final result = await _apiService.getInstructorSchedules(instructorId);
+      final schedulesResult = await _apiService.getInstructorSchedules(
+        instructorId,
+      );
+      final subjectsResult = await _apiService.getInstructorSubjects(
+        instructorId,
+      );
 
-      if (result['success']) {
-        final List<dynamic> data = result['data'];
+      if (schedulesResult['success'] && subjectsResult['success']) {
+        final List<dynamic> schedulesData = schedulesResult['data'];
+        final List<dynamic> subjectsData = subjectsResult['data'];
+
+        // Create a set of valid subject IDs for filtering
+        final validSubjectIds = subjectsData.map((s) => s['id']).toSet();
+
         final List<Map<String, dynamic>> loadedSchedules = [];
 
         // Get day name for selected date (e.g., "Monday")
         final dayName = DateFormat('EEEE').format(_selectedDate);
         print('📅 Selected Date: $_selectedDate');
         print('📅 Day Name: $dayName');
-        print('📦 Total Schedules Fetched: ${data.length}');
+        print('📦 Total Schedules Fetched: ${schedulesData.length}');
+        print('📚 Valid Subjects Count: ${validSubjectIds.length}');
 
-        for (var item in data) {
+        for (var item in schedulesData) {
+          // Filter by valid subject
+          final subjectId = item['subject']?['id'];
+          if (subjectId == null || !validSubjectIds.contains(subjectId)) {
+            print(
+              '    ⏭️ Skipping schedule for subject ID: $subjectId (Not in valid list)',
+            );
+            continue;
+          }
           // Check if schedule matches selected day
           final String scheduleDay = item['dayOfWeek'] ?? '';
           print(
@@ -149,9 +169,15 @@ class _QrScreenState extends State<QrScreen> {
           _schedules = loadedSchedules;
           _isLoading = false;
         });
+
+        // Fetch active sessions for the selected date
+        _loadActiveSessions();
       } else {
         setState(() {
-          _errorMessage = result['error'] ?? 'Failed to load schedules';
+          _errorMessage =
+              schedulesResult['error'] ??
+              subjectsResult['error'] ??
+              'Failed to load data';
           _isLoading = false;
         });
       }
@@ -160,6 +186,36 @@ class _QrScreenState extends State<QrScreen> {
         _errorMessage = 'Error: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadActiveSessions() async {
+    try {
+      final result = await _apiService.getSessionsByDate(_selectedDate);
+      if (result['success']) {
+        final List<dynamic> sessions = result['data'];
+        final Map<int, Map<String, dynamic>> activeSessionsMap = {};
+
+        for (var session in sessions) {
+          // Check if active (no end time)
+          if (session['actualEndTime'] == null) {
+            int? scheduleId = session['scheduleId'];
+            if (scheduleId == null && session['schedule'] != null) {
+              scheduleId = session['schedule']['id'];
+            }
+
+            if (scheduleId != null) {
+              activeSessionsMap[scheduleId] = session as Map<String, dynamic>;
+            }
+          }
+        }
+
+        setState(() {
+          _activeSessions = activeSessionsMap;
+        });
+      }
+    } catch (e) {
+      print('Error loading active sessions: $e');
     }
   }
 
@@ -531,6 +587,7 @@ class _QrScreenState extends State<QrScreen> {
 
   Widget _buildScheduleCard(Map<String, dynamic> schedule) {
     final isSelected = _selectedSchedule == schedule['code'];
+    final hasActiveSession = _activeSessions.containsKey(schedule['id']);
 
     return GestureDetector(
       onTap: () {
@@ -653,12 +710,149 @@ class _QrScreenState extends State<QrScreen> {
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: Colors.grey[400],
-            ),
+            if (hasActiveSession)
+              IconButton(
+                icon: const Icon(Icons.qr_code, color: Color(0xFF1E3A8A)),
+                onPressed: () {
+                  _showQrCodeDialog(_activeSessions[schedule['id']]!, schedule);
+                },
+              )
+            else
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: Colors.grey[400],
+              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showQrCodeDialog(
+    Map<String, dynamic> session,
+    Map<String, dynamic> schedule,
+  ) {
+    final uniqueHash = session['uniqueHash'] ?? session['id'].toString();
+    final room = session['actualRoom']?['name'] ?? schedule['room'];
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  const SizedBox(width: double.infinity),
+                  const Text(
+                    'QR Code',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: uniqueHash,
+                  version: QrVersions.auto,
+                  size: 220,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '${schedule['code']} - ${schedule['name']}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          color: Colors.white70,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            room,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time,
+                          color: Colors.white70,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            schedule['time'],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -750,7 +944,8 @@ class SessionDetailsScreen extends StatefulWidget {
 
 class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   String _selectedRoom = 'Room 301 (Scheduled)';
-  String? _sessionId;
+  String? _sessionId; // This is the uniqueHash for QR
+  int? _currentSessionId; // This is the numeric ID for API calls
   DateTime? _sessionStartTime;
   TimeOfDay? _cutoffTime;
   // final Uuid _uuid = const Uuid(); // Removed unused field
@@ -840,6 +1035,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                     latestSession['uniqueHash'] ??
                     latestSession['id']
                         .toString(); // Use uniqueHash if available, else ID
+                _currentSessionId = latestSession['id'];
 
                 // Parse start time if available, else use sessionDate
                 if (latestSession['actualStartTime'] != null) {
@@ -975,6 +1171,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           _isSessionActive = true;
           _sessionStartTime = DateTime.now();
           _sessionId = uniqueHash;
+          _currentSessionId = sessionId;
         });
 
         SessionState.instance.startSession(
@@ -1591,6 +1788,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                 setState(() {
                   _isSessionActive = false;
                   _sessionId = null;
+                  _currentSessionId = null;
                   _sessionStartTime = null;
                   _cutoffTime = null;
                 });
