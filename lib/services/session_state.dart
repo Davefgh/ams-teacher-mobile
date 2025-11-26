@@ -9,11 +9,18 @@ class SessionState {
   Map<String, dynamic>? currentSchedule;
   DateTime? cutoffTime;
 
-  void startSession(Map<String, dynamic> schedule, DateTime start) {
+  String? qrHash;
+
+  void startSession(
+    Map<String, dynamic> schedule,
+    DateTime start, {
+    String? hash,
+  }) {
     isActive = true;
     currentSchedule = schedule;
     startTime = start;
     cutoffTime = null; // Reset or set if passed
+    qrHash = hash;
   }
 
   void endSession() {
@@ -21,5 +28,6 @@ class SessionState {
     currentSchedule = null;
     startTime = null;
     cutoffTime = null;
+    qrHash = null;
   }
 }

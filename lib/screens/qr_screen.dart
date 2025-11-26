@@ -3,7 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../services/session_state.dart';
-import 'dart:convert';
+// import 'dart:convert'; // Removed unused import
 import 'attendance_screen.dart';
 import 'dashboard_screen.dart';
 import 'profile_screen.dart';
@@ -65,11 +65,22 @@ class _QrScreenState extends State<QrScreen> {
 
         // Get day name for selected date (e.g., "Monday")
         final dayName = DateFormat('EEEE').format(_selectedDate);
+        print('📅 Selected Date: $_selectedDate');
+        print('📅 Day Name: $dayName');
+        print('📦 Total Schedules Fetched: ${data.length}');
 
         for (var item in data) {
           // Check if schedule matches selected day
           final String scheduleDay = item['dayOfWeek'] ?? '';
-          if (scheduleDay != dayName) continue;
+          print(
+            '  - Found schedule: ${item['subject']?['code']} on $scheduleDay',
+          );
+
+          // REMOVED FILTER: Show all schedules as per user request
+          // if (scheduleDay.toLowerCase() != dayName.toLowerCase()) {
+          //   print('    ❌ Day mismatch: $scheduleDay != $dayName');
+          //   continue;
+          // }
 
           // Extract time info
           final String timeIn = item['timeIn'] ?? '';
@@ -84,7 +95,6 @@ class _QrScreenState extends State<QrScreen> {
                 ? timeOut.substring(0, 5)
                 : timeOut;
 
-            // Convert to AM/PM for display
             try {
               final inParts = formattedTimeIn.split(':');
               final outParts = formattedTimeOut.split(':');
@@ -103,16 +113,16 @@ class _QrScreenState extends State<QrScreen> {
                 final inHour = inTime.hour > 12
                     ? inTime.hour - 12
                     : (inTime.hour == 0 ? 12 : inTime.hour);
+                final inMinute = inTime.minute.toString().padLeft(2, '0');
 
                 final outPeriod = outTime.hour >= 12 ? 'PM' : 'AM';
                 final outHour = outTime.hour > 12
                     ? outTime.hour - 12
                     : (outTime.hour == 0 ? 12 : outTime.hour);
+                final outMinute = outTime.minute.toString().padLeft(2, '0');
 
                 timeStr =
-                    '$inHour:${inTime.minute.toString().padLeft(2, '0')} $inPeriod - $outHour:${outTime.minute.toString().padLeft(2, '0')} $outPeriod';
-              } else {
-                timeStr = '$formattedTimeIn - $formattedTimeOut';
+                    '$inHour:$inMinute $inPeriod - $outHour:$outMinute $outPeriod';
               }
             } catch (e) {
               timeStr = '$formattedTimeIn - $formattedTimeOut';
@@ -121,19 +131,15 @@ class _QrScreenState extends State<QrScreen> {
 
           loadedSchedules.add({
             'id': item['id'],
-            'code': item['subject']?['code'] ?? 'N/A',
             'name': item['subject']?['name'] ?? 'Unknown Subject',
+            'code': item['subject']?['code'] ?? 'N/A',
             'time': timeStr,
-            'room': item['classroom']?['name'] ?? 'TBA',
             'day': scheduleDay,
+            'room': item['classroom']?['name'] ?? 'Unknown Room',
+            'section': item['section']?['name'] ?? 'Unknown Section',
             'instructor':
-                ('${item['instructor']?['firstname'] ?? ''} ${item['instructor']?['lastname'] ?? ''}'
-                        .trim())
-                    .isEmpty
-                ? 'Unknown Instructor'
-                : '${item['instructor']?['firstname'] ?? ''} ${item['instructor']?['lastname'] ?? ''}'
-                      .trim(),
-            'section': item['section']?['name'] ?? '',
+                '${item['instructor']?['firstname'] ?? ''} ${item['instructor']?['lastname'] ?? ''}'
+                    .trim(),
             // Keep original data for session creation
             'original_data': item,
           });
@@ -607,6 +613,12 @@ class _QrScreenState extends State<QrScreen> {
                   const SizedBox(height: 4),
                   Row(
                     children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
                       Text(
                         schedule['day'],
                         style: const TextStyle(
@@ -741,7 +753,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   String? _sessionId;
   DateTime? _sessionStartTime;
   TimeOfDay? _cutoffTime;
-  final Uuid _uuid = const Uuid();
+  // final Uuid _uuid = const Uuid(); // Removed unused field
   bool _isSessionActive = false;
 
   final List<String> _rooms = [
@@ -780,29 +792,219 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
       _cutoffTime = SessionState.instance.cutoffTime != null
           ? TimeOfDay.fromDateTime(SessionState.instance.cutoffTime!)
           : null;
+    } else {
+      _checkExistingSession();
     }
   }
 
-  void _startSession() {
+  bool _isCheckingSession = false;
+
+  Future<void> _checkExistingSession() async {
     setState(() {
-      _isSessionActive = true;
-      _sessionStartTime = DateTime.now();
-      _sessionId = _uuid.v4();
+      _isCheckingSession = true;
     });
 
-    // Update global session state
-    SessionState.instance.startSession(widget.schedule, _sessionStartTime!);
-    if (_cutoffTime != null) {
-      final now = DateTime.now();
-      SessionState.instance.cutoffTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        _cutoffTime!.hour,
-        _cutoffTime!.minute,
-      );
+    try {
+      final scheduleId = widget.schedule['id'];
+      final result = await ApiService().getSessionByScheduleId(scheduleId);
+
+      if (result['success'] == true) {
+        final List<dynamic> sessions = result['data'];
+        if (sessions.isNotEmpty) {
+          // Find active session or session for today
+          // Sort by createdAt desc to get latest
+          sessions.sort((a, b) {
+            final dateA = DateTime.parse(a['createdAt']);
+            final dateB = DateTime.parse(b['createdAt']);
+            return dateB.compareTo(dateA);
+          });
+
+          final latestSession = sessions.first;
+          final sessionDate = DateTime.parse(latestSession['sessionDate']);
+
+          // Check if session is for the selected date
+          final isSameDate =
+              sessionDate.year == widget.selectedDate.year &&
+              sessionDate.month == widget.selectedDate.month &&
+              sessionDate.day == widget.selectedDate.day;
+
+          if (isSameDate) {
+            // Check if session is active (no end time)
+            // The user provided example shows actualEndTime as null for active/new sessions
+            final isActive = latestSession['actualEndTime'] == null;
+
+            if (isActive) {
+              setState(() {
+                _isSessionActive = true;
+                _sessionId =
+                    latestSession['uniqueHash'] ??
+                    latestSession['id']
+                        .toString(); // Use uniqueHash if available, else ID
+
+                // Parse start time if available, else use sessionDate
+                if (latestSession['actualStartTime'] != null) {
+                  _sessionStartTime = DateTime.parse(
+                    latestSession['actualStartTime'],
+                  );
+                } else {
+                  _sessionStartTime = sessionDate;
+                }
+
+                // Restore cutoff if available
+                if (latestSession['attendanceCutOff'] != null) {
+                  final cutoff = DateTime.parse(
+                    latestSession['attendanceCutOff'],
+                  );
+                  _cutoffTime = TimeOfDay.fromDateTime(cutoff);
+                }
+              });
+
+              // Update global state
+              SessionState.instance.startSession(
+                widget.schedule,
+                _sessionStartTime!,
+                hash: _sessionId,
+              );
+
+              if (_cutoffTime != null) {
+                final now = DateTime.now();
+                SessionState.instance.cutoffTime = DateTime(
+                  now.year,
+                  now.month,
+                  now.day,
+                  _cutoffTime!.hour,
+                  _cutoffTime!.minute,
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error checking existing session: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingSession = false;
+        });
+      }
     }
-    _showQrCode();
+  }
+
+  bool _isStartingSession = false;
+
+  Future<void> _startSession() async {
+    setState(() {
+      _isStartingSession = true;
+    });
+
+    try {
+      final scheduleId = widget.schedule['id'];
+
+      // 1. Create Session first
+      final sessionResult = await ApiService().createSession(
+        scheduleId: scheduleId,
+      );
+
+      if (sessionResult['success'] != true) {
+        throw Exception(sessionResult['error'] ?? 'Failed to create session');
+      }
+
+      final sessionData = sessionResult['data'];
+      final sessionId = sessionData['id'];
+
+      // Calculate expiration minutes if cutoff is set
+      int expirationMinutes = 60; // Default
+      int? attendanceCutoffMinutes;
+
+      if (_cutoffTime != null) {
+        final now = DateTime.now();
+        final cutoff = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          _cutoffTime!.hour,
+          _cutoffTime!.minute,
+        );
+        final diff = cutoff.difference(now).inMinutes;
+        if (diff > 0) {
+          expirationMinutes = diff;
+          attendanceCutoffMinutes = diff;
+        }
+      }
+
+      // 2. Start Session (PATCH /api/sessions/{id}/start)
+      final startResult = await ApiService().startSession(
+        sessionId,
+        actualRoomId: null, // Room IDs not available yet
+        attendanceCutoffMinutes: attendanceCutoffMinutes,
+      );
+
+      if (startResult['success'] != true) {
+        throw Exception(startResult['error'] ?? 'Failed to start session');
+      }
+
+      final uniqueHash = const Uuid().v4(); // Generate UUID
+
+      // 3. Generate QR Code
+      final result = await ApiService().generateQrCode(
+        sessionId: sessionId,
+        expirationMinutes: expirationMinutes,
+        uniqueHash: uniqueHash,
+      );
+
+      if (result['success'] == true) {
+        final data = result['data'];
+        final uniqueHash = data['uniqueHash'];
+
+        setState(() {
+          _isSessionActive = true;
+          _sessionStartTime = DateTime.now();
+          _sessionId = uniqueHash;
+        });
+
+        // Update global session state
+        SessionState.instance.startSession(
+          widget.schedule,
+          _sessionStartTime!,
+          hash: uniqueHash,
+        );
+
+        if (_cutoffTime != null) {
+          final now = DateTime.now();
+          SessionState.instance.cutoffTime = DateTime(
+            now.year,
+            now.month,
+            now.day,
+            _cutoffTime!.hour,
+            _cutoffTime!.minute,
+          );
+        }
+
+        _showQrCode();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Failed to generate QR code'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isStartingSession = false;
+        });
+      }
+    }
   }
 
   void _showQrCode() {
@@ -941,19 +1143,9 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   }
 
   String _generateQrData() {
-    final sessionData = {
-      'sessionId': _sessionId ?? _uuid.v4(),
-      'subject': '${widget.schedule['code']} - ${widget.schedule['name']}',
-      'room': _selectedRoom,
-      'startTime':
-          _sessionStartTime?.toIso8601String() ??
-          DateTime.now().toIso8601String(),
-      'cutoffTime': _cutoffTime != null
-          ? '${_cutoffTime!.hour}:${_cutoffTime!.minute}'
-          : null,
-      'status': 'active',
-    };
-    return jsonEncode(sessionData);
+    // Return the hash from session state or local state
+    // This hash is what the student app will scan
+    return SessionState.instance.qrHash ?? _sessionId ?? '';
   }
 
   @override
@@ -1180,7 +1372,9 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: _startSession,
+        onPressed: (_isStartingSession || _isCheckingSession)
+            ? null
+            : _startSession,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF1E3A8A),
           shape: RoundedRectangleBorder(
@@ -1188,21 +1382,30 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           ),
           elevation: 0,
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.play_arrow_rounded, color: Colors.white),
-            SizedBox(width: 8),
-            Text(
-              'Start Session',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+        child: (_isStartingSession || _isCheckingSession)
+            ? const SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2.5,
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.play_arrow_rounded, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    'Start Session',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }

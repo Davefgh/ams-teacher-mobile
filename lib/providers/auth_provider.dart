@@ -58,8 +58,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       print('🔍 Auth Provider - Processing login response...');
       print('🔍 Response data: $response');
-      print('🔍 Checking success field: ${response['success']}');
-      print('🔍 Checking accessToken field: ${response['accessToken']}');
 
       if (response['success'] == true && response['accessToken'] != null) {
         print('✅ Login successful - saving tokens...');
@@ -71,24 +69,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
         print('✅ Tokens saved - fetching profile...');
 
-        // Fetch instructor profile to get ID
+        // Fetch instructor profile to get ID and verify role
         try {
           final profileResponse = await _apiService.getInstructorProfile();
 
           if (profileResponse['success'] == true &&
               profileResponse['data'] != null) {
             final profileData = profileResponse['data'] as Map<String, dynamic>;
+
+            // CHECK ROLE: Must have instructorProfile
+            if (profileData['instructorProfile'] == null) {
+              print('❌ Access denied: User is not an instructor');
+              // Clear tokens immediately
+              await StorageService.clearAll();
+
+              state = state.copyWith(
+                isLoading: false,
+                error: 'Access denied: User is not an instructor',
+                isAuthenticated: false,
+              );
+              return;
+            }
+
+            final instructorProfile = profileData['instructorProfile'];
             String? instructorId;
 
-            if (profileData['instructorProfile'] != null) {
-              final instructorProfile = profileData['instructorProfile'];
-              if (instructorProfile['id'] != null) {
-                instructorId = instructorProfile['id'].toString();
-              }
-            } else if (profileData['id'] != null) {
-              instructorId = profileData['id'].toString();
-            } else if (profileData['Id'] != null) {
-              instructorId = profileData['Id'].toString();
+            if (instructorProfile['id'] != null) {
+              instructorId = instructorProfile['id'].toString();
             }
 
             if (instructorId != null) {
@@ -96,24 +103,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
               print('✅ Instructor ID saved: $instructorId');
             } else {
               print('⚠️ Instructor ID not found in profile data');
-              print('Profile Data Keys: ${profileData.keys.toList()}');
             }
+          } else {
+            // Failed to fetch profile, but we have token.
+            // Ideally we should fail here too if we want strict role check,
+            // but for now let's assume if we can't get profile we can't verify role.
+            // Let's be strict for security.
+            print('❌ Failed to fetch profile for role verification');
+            await StorageService.clearAll();
+            state = state.copyWith(
+              isLoading: false,
+              error: 'Failed to verify user role. Please try again.',
+              isAuthenticated: false,
+            );
+            return;
           }
         } catch (profileError) {
-          print('⚠️ Profile fetch error (continuing anyway): $profileError');
-          // Continue anyway, sections will load via JWT token
+          print('❌ Profile fetch error: $profileError');
+          await StorageService.clearAll();
+          state = state.copyWith(
+            isLoading: false,
+            error: 'Failed to verify user role. Please try again.',
+            isAuthenticated: false,
+          );
+          return;
         }
 
         print('✅ Setting authenticated state...');
         state = state.copyWith(isAuthenticated: true, isLoading: false);
       } else {
         print('❌ Login failed - success or accessToken missing');
-        print('   → success: ${response['success']}');
-        print('   → accessToken: ${response['accessToken']}');
 
+        // GENERIC ERROR MESSAGE
         state = state.copyWith(
           isLoading: false,
-          error: response['message'] as String? ?? 'Login failed',
+          error: 'Incorrect username or password',
         );
       }
     } catch (e) {
@@ -161,10 +185,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
             '2. Test: http://192.168.254.106:8081 in phone browser\n'
             '3. Check backend logs for rejection reason';
       } else {
-        errorMsg =
-            'Connection error:\n${errorString}\n\n'
-            'Server: http://192.168.254.106:8081\n'
-            'Check backend is running and accessible.';
+        // For other errors, we might want to be generic too if it's a 401/403 from server,
+        // but here 'e' is usually a network exception or our own thrown exception.
+        // If api_service throws "Server error: 401", we should catch it.
+        // ApiService.login throws "Server error: 401" if status is not 200.
+        // Wait, ApiService.login returns data if 200 OR 401.
+        // If it's 401, success will be false (likely), so it goes to the else block above.
+        // So this catch block is mainly for network errors.
+        errorMsg = 'Connection error. Please check your internet connection.';
       }
 
       state = state.copyWith(isLoading: false, error: errorMsg);

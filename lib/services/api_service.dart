@@ -516,6 +516,217 @@ class ApiService {
     }
   }
 
+  // ==================== QR CODE METHODS ====================
+
+  Future<Map<String, dynamic>> generateQrCode({
+    required int sessionId,
+    required int expirationMinutes,
+    required String uniqueHash, // Added required uniqueHash
+    int? maxUsage,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/QrCode/generate';
+      print('🌐 Generating QR Code at: $url');
+
+      final body = {
+        'sessionId': sessionId,
+        'expirationMinutes': expirationMinutes,
+        'uniqueHash': uniqueHash, // Included in body
+        'maxUsage': maxUsage,
+      };
+
+      final response = await _makeRequest(
+        method: 'POST',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+        requestId: requestId,
+      );
+
+      print('📊 Generate QR Response Status: ${response.statusCode}');
+      print('📝 Generate QR Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'data': data, // Should contain uniqueHash
+        };
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': errorData['message'] ?? 'Failed to generate QR code',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in generateQrCode: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Get sessions by schedule ID
+  Future<Map<String, dynamic>> getSessionByScheduleId(
+    int scheduleId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/schedule/$scheduleId';
+      print('🌐 Fetching session by schedule ID: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      print('📊 Get Session Response Status: ${response.statusCode}');
+      print('📝 Get Session Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else if (response.statusCode == 404) {
+        return {'success': true, 'data': []}; // No sessions found
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch session: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getSessionByScheduleId: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Create a new session
+  Future<Map<String, dynamic>> createSession({
+    required int scheduleId,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions';
+      print('🌐 Creating session at: $url');
+
+      final body = {
+        'scheduleId': scheduleId,
+        'status': 'active', // Assuming 'active' is the initial status
+        'sessionDate': DateTime.now().toIso8601String(),
+      };
+
+      final response = await _makeRequest(
+        method: 'POST',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+        requestId: requestId,
+      );
+
+      print('📊 Create Session Response Status: ${response.statusCode}');
+      print('📝 Create Session Response Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': errorData['message'] ?? 'Failed to create session',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in createSession: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Start a session
+  Future<Map<String, dynamic>> startSession(
+    int sessionId, {
+    int? actualRoomId,
+    int? attendanceCutoffMinutes,
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/$sessionId/start';
+      print('🌐 Starting session at: $url');
+
+      final body = {
+        'actualRoomId': actualRoomId,
+        'attendanceCutoffMinutes': attendanceCutoffMinutes,
+      };
+
+      final response = await _makeRequest(
+        method: 'PATCH',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+        requestId: requestId,
+      );
+
+      print('📊 Start Session Response Status: ${response.statusCode}');
+      print('📝 Start Session Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        // Response might be empty or contain session data
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          return {'success': true, 'data': data};
+        }
+        return {'success': true};
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': errorData['message'] ?? 'Failed to start session',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in startSession: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
   // ==================== SECTIONS METHODS ====================
 
   /// Get all sections/subjects for the logged-in instructor
