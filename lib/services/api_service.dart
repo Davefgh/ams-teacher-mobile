@@ -727,6 +727,216 @@ class ApiService {
     }
   }
 
+  /// Update session room
+  Future<Map<String, dynamic>> updateSessionRoom(
+    int sessionId,
+    int actualRoomId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/$sessionId/room';
+      print('🌐 Updating session room at: $url');
+
+      final body = {'actualRoomId': actualRoomId};
+
+      final response = await _makeRequest(
+        method: 'PATCH',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(body),
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        if (response.body.isNotEmpty) {
+          final data = jsonDecode(response.body);
+          return {'success': true, 'data': data};
+        }
+        return {'success': true};
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': errorData['message'] ?? 'Failed to update session room',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in updateSessionRoom: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Get sessions by date
+  Future<Map<String, dynamic>> getSessionsByDate(
+    DateTime date, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final dateStr = date.toIso8601String();
+      final url = '${ApiConstants.baseUrl}/api/sessions/date/$dateStr';
+      print('🌐 Fetching sessions by date: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch sessions: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getSessionsByDate: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Get sessions by status
+  Future<Map<String, dynamic>> getSessionsByStatus(
+    String status, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/status/$status';
+      print('🌐 Fetching sessions by status: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch sessions: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getSessionsByStatus: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Delete session
+  Future<Map<String, dynamic>> deleteSession(
+    int sessionId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/$sessionId';
+      print('🌐 Deleting session at: $url');
+
+      final response = await _makeRequest(
+        method: 'DELETE',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'reason': ''}),
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        return {'success': true};
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'error': errorData['message'] ?? 'Failed to delete session',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in deleteSession: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
+  /// Get session by ID
+  Future<Map<String, dynamic>> getSessionById(
+    int sessionId, {
+    String? requestId,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        return {'success': false, 'error': 'Not authenticated.'};
+      }
+
+      final url = '${ApiConstants.baseUrl}/api/sessions/$sessionId';
+      print('🌐 Fetching session by ID: $url');
+
+      final response = await _makeRequest(
+        method: 'GET',
+        uri: Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        requestId: requestId,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'data': data};
+      } else {
+        return {
+          'success': false,
+          'error': 'Failed to fetch session: ${response.statusCode}',
+        };
+      }
+    } catch (e) {
+      print('💥 Error in getSessionById: $e');
+      return {'success': false, 'error': 'Error: $e'};
+    }
+  }
+
   // ==================== SECTIONS METHODS ====================
 
   /// Get all sections/subjects for the logged-in instructor

@@ -899,11 +899,25 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
     });
 
     try {
-      final scheduleId = widget.schedule['id'];
+      // 1. Show Configuration Dialog
+      final config = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const QrGenerationDialog(),
+      );
 
-      // 1. Create Session first
+      if (config == null) {
+        setState(() => _isStartingSession = false);
+        return; // User cancelled
+      }
+
+      final int expirationMinutes = config['expirationMinutes'];
+      final int? maxUsage = config['maxUsage'];
+      final String uniqueHash = config['uniqueHash'];
+
+      // 2. Create Session
       final sessionResult = await ApiService().createSession(
-        scheduleId: scheduleId,
+        scheduleId: widget.schedule['id'],
       );
 
       if (sessionResult['success'] != true) {
@@ -913,11 +927,13 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
       final sessionData = sessionResult['data'];
       final sessionId = sessionData['id'];
 
-      // Calculate expiration minutes if cutoff is set
-      int expirationMinutes = 60; // Default
+      // Calculate attendance cutoff based on expiration if not manually set
+      // Or use the manual cutoff if set
       int? attendanceCutoffMinutes;
-
       if (_cutoffTime != null) {
+        // ... existing cutoff logic if needed, or rely on expiration
+        // For now, let's respect the dialog's expiration for the QR code validity
+        // and the manual cutoff for the session attendance window if set.
         final now = DateTime.now();
         final cutoff = DateTime(
           now.year,
@@ -927,16 +943,17 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           _cutoffTime!.minute,
         );
         final diff = cutoff.difference(now).inMinutes;
-        if (diff > 0) {
-          expirationMinutes = diff;
-          attendanceCutoffMinutes = diff;
-        }
+        if (diff > 0) attendanceCutoffMinutes = diff;
+      } else {
+        // If no manual cutoff, maybe use expiration time?
+        // The user prompt implies expiration is for the QR code.
+        // Let's stick to existing logic: if _cutoffTime is null, attendanceCutoffMinutes is null (unlimited/manual stop)
       }
 
-      // 2. Start Session (PATCH /api/sessions/{id}/start)
+      // 3. Start Session
       final startResult = await ApiService().startSession(
         sessionId,
-        actualRoomId: null, // Room IDs not available yet
+        actualRoomId: null,
         attendanceCutoffMinutes: attendanceCutoffMinutes,
       );
 
@@ -944,26 +961,22 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         throw Exception(startResult['error'] ?? 'Failed to start session');
       }
 
-      final uniqueHash = const Uuid().v4(); // Generate UUID
-
-      // 3. Generate QR Code
+      // 4. Generate QR Code
       final result = await ApiService().generateQrCode(
         sessionId: sessionId,
         expirationMinutes: expirationMinutes,
         uniqueHash: uniqueHash,
+        maxUsage: maxUsage,
       );
 
       if (result['success'] == true) {
-        final data = result['data'];
-        final uniqueHash = data['uniqueHash'];
-
+        // ... success handling ...
         setState(() {
           _isSessionActive = true;
           _sessionStartTime = DateTime.now();
           _sessionId = uniqueHash;
         });
 
-        // Update global session state
         SessionState.instance.startSession(
           widget.schedule,
           _sessionStartTime!,
@@ -971,6 +984,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         );
 
         if (_cutoffTime != null) {
+          // ... update cutoff in state ...
           final now = DateTime.now();
           SessionState.instance.cutoffTime = DateTime(
             now.year,
@@ -993,16 +1007,98 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+      final errorMessage = e.toString();
+      if (errorMessage.contains('already exists')) {
+        if (mounted) {
+          _showSessionConflictDialog();
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
       }
     } finally {
       if (mounted) {
         setState(() {
           _isStartingSession = false;
         });
+      }
+    }
+  }
+
+  void _showSessionConflictDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Session Conflict'),
+        content: const Text(
+          'A session already exists for this schedule today. Do you want to delete the existing session and start a new one?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteAndRetrySession();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete & Start New'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteAndRetrySession() async {
+    setState(() => _isStartingSession = true);
+    try {
+      final scheduleId = widget.schedule['id'];
+      final result = await ApiService().getSessionByScheduleId(scheduleId);
+
+      if (result['success'] == true) {
+        final List<dynamic> sessions = result['data'];
+        final now = DateTime.now();
+        final todaySession = sessions.firstWhere((s) {
+          final date = DateTime.parse(s['sessionDate']);
+          return date.year == now.year &&
+              date.month == now.month &&
+              date.day == now.day;
+        }, orElse: () => null);
+
+        if (todaySession != null) {
+          final deleteResult = await ApiService().deleteSession(
+            todaySession['id'],
+          );
+          if (deleteResult['success'] == true) {
+            if (mounted) {
+              // Reset state and retry
+              setState(() {
+                _isStartingSession = false;
+              });
+              _startSession();
+            }
+          } else {
+            throw Exception(
+              deleteResult['error'] ?? 'Failed to delete session',
+            );
+          }
+        } else {
+          throw Exception('Could not find the conflicting session to delete.');
+        }
+      } else {
+        throw Exception(result['error'] ?? 'Failed to fetch sessions');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isStartingSession = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -1523,6 +1619,336 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class QrGenerationDialog extends StatefulWidget {
+  const QrGenerationDialog({super.key});
+
+  @override
+  State<QrGenerationDialog> createState() => _QrGenerationDialogState();
+}
+
+class _QrGenerationDialogState extends State<QrGenerationDialog> {
+  int _expirationMinutes = 30;
+  final TextEditingController _maxUsageController = TextEditingController();
+  final TextEditingController _hashController = TextEditingController();
+  bool _isUnlimitedUsage = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _generateNewHash();
+  }
+
+  void _generateNewHash() {
+    setState(() {
+      _hashController.text = const Uuid().v4();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.qr_code_2, color: Color(0xFF1E3A8A)),
+                    SizedBox(width: 12),
+                    Text(
+                      'Generate QR Code',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E3A8A),
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Generate a QR code for students to scan. They can use their mobile app to record attendance.',
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+
+            // Expiration Time
+            _buildLabel('Expiration Time', isRequired: true),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _expirationMinutes,
+                  isExpanded: true,
+                  icon: const Icon(Icons.keyboard_arrow_down),
+                  items: [15, 30, 60, 120].map((minutes) {
+                    return DropdownMenuItem(
+                      value: minutes,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time,
+                            size: 18,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$minutes Minutes${minutes == 30 ? " (Default)" : ""}',
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _expirationMinutes = value);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'How long the QR code remains valid.',
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            const SizedBox(height: 20),
+
+            // Max Usage Limit
+            _buildLabel('Max Usage Limit', isRequired: false),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Icon(
+                      Icons.numbers,
+                      size: 20,
+                      color: Colors.grey[400],
+                    ),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _maxUsageController,
+                      enabled: !_isUnlimitedUsage,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter limit',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  if (_isUnlimitedUsage)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(
+                        'Unlimited',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isUnlimitedUsage = !_isUnlimitedUsage;
+                  if (_isUnlimitedUsage) _maxUsageController.clear();
+                });
+              },
+              child: Row(
+                children: [
+                  SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: Checkbox(
+                      value: _isUnlimitedUsage,
+                      onChanged: (value) {
+                        setState(() {
+                          _isUnlimitedUsage = value ?? true;
+                          if (_isUnlimitedUsage) _maxUsageController.clear();
+                        });
+                      },
+                      activeColor: const Color(0xFF1E3A8A),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Unlimited usage'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Unique Identifier Hash
+            _buildLabel('Unique Identifier Hash', isRequired: true),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.tag, size: 18, color: Colors.grey[400]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _hashController.text,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E3A8A),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _generateNewHash,
+                    tooltip: 'Generate new hash',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Client-side signature identifier for this QR code.',
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            const SizedBox(height: 32),
+
+            // Actions
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final maxUsage = _isUnlimitedUsage
+                          ? null
+                          : int.tryParse(_maxUsageController.text);
+
+                      Navigator.pop(context, {
+                        'expirationMinutes': _expirationMinutes,
+                        'maxUsage': maxUsage,
+                        'uniqueHash': _hashController.text,
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E3A8A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Generate QR Code',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[700],
+                      side: BorderSide(color: Colors.grey[300]!),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text, {bool isRequired = false}) {
+    return Row(
+      children: [
+        Text(
+          text,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: Colors.black87,
+          ),
+        ),
+        if (isRequired)
+          const Text(
+            ' *',
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          ),
+        if (!isRequired)
+          Text(
+            ' (Optional)',
+            style: TextStyle(
+              color: Colors.grey[500],
+              fontSize: 12,
+              fontWeight: FontWeight.normal,
+            ),
+          ),
+      ],
     );
   }
 }
