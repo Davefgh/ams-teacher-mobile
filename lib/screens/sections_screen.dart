@@ -170,10 +170,6 @@ class _SectionsScreenState extends State<SectionsScreen> {
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh, color: Colors.white, size: 28),
-                onPressed: _loadSections,
-              ),
             ],
           ),
         ),

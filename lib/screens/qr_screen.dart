@@ -640,30 +640,44 @@ class _QrScreenState extends State<QrScreen> {
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
-                        Icons.access_time,
+                        Icons.schedule_rounded, // Mobile-friendly icon
                         size: 14,
                         color: Colors.grey[600],
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        schedule['time'],
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      Flexible(
+                        child: Text(
+                          schedule['time'],
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Icon(
-                        Icons.location_on,
+                        Icons.place_rounded, // Mobile-friendly icon
                         size: 14,
                         color: Colors.grey[600],
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        schedule['room'],
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      Flexible(
+                        child: Text(
+                          schedule['room'],
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[600],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -671,7 +685,7 @@ class _QrScreenState extends State<QrScreen> {
                   Row(
                     children: [
                       Icon(
-                        Icons.calendar_today,
+                        Icons.event_rounded, // Mobile-friendly icon
                         size: 14,
                         color: Colors.grey[600],
                       ),
@@ -712,15 +726,18 @@ class _QrScreenState extends State<QrScreen> {
             ),
             if (hasActiveSession)
               IconButton(
-                icon: const Icon(Icons.qr_code, color: Color(0xFF1E3A8A)),
+                icon: const Icon(
+                  Icons.qr_code_2_rounded,
+                  color: Color(0xFF1E3A8A),
+                ), // Mobile-friendly icon
                 onPressed: () {
                   _showQrCodeDialog(_activeSessions[schedule['id']]!, schedule);
                 },
               )
             else
               Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
+                Icons.chevron_right_rounded, // Mobile-friendly icon
+                size: 20,
                 color: Colors.grey[400],
               ),
           ],
@@ -2238,7 +2255,7 @@ class _QrGenerationDialogState extends State<QrGenerationDialog> {
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
+                  child: TextButton(
                     onPressed: () {
                       final maxUsage = _isUnlimitedUsage
                           ? null
@@ -2250,14 +2267,12 @@ class _QrGenerationDialogState extends State<QrGenerationDialog> {
                         'uniqueHash': _hashController.text,
                       });
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E3A8A),
-                      foregroundColor: Colors.white,
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF1E3A8A),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      elevation: 0,
                     ),
                     child: const Text(
                       'Generate QR Code',
@@ -2270,11 +2285,10 @@ class _QrGenerationDialogState extends State<QrGenerationDialog> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: OutlinedButton(
+                  child: TextButton(
                     onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
-                      side: BorderSide(color: Colors.grey[300]!),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),

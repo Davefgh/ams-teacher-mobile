@@ -1,5 +1,7 @@
 // lib/services/api_service.dart
 import 'package:http/http.dart' as http;
+import 'dart:io';
+import 'package:http/io_client.dart';
 import 'dart:async';
 import 'dart:convert';
 import '../utils/constants.dart';
@@ -28,9 +30,12 @@ class ApiService {
   // Using standard http.Client to avoid Platform._version error
   // For HTTPS with self-signed certs, you would need platform-specific handling
   http.Client _createHttpClient() {
-    // For local HTTP development, standard client works fine
-    // If you need HTTPS with self-signed certificates, use conditional imports
-    return http.Client();
+    // For local development with self-signed certificates
+    final ioClient = HttpClient()
+      ..badCertificateCallback =
+          (X509Certificate cert, String host, int port) => true;
+
+    return IOClient(ioClient);
   }
 
   // Cancel a request by ID
