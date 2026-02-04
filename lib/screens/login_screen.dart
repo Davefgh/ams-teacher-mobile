@@ -52,6 +52,11 @@ class _LoginScreenState extends State<LoginScreen> {
           response['refreshToken'] as String? ?? '',
         );
         
+        // Save instructor ID from login response
+        if (response['user'] != null) {
+          await StorageService.saveInstructorId(response['user'].toString());
+        }
+        
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -116,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset(
-                'lib/images/aclc_logo.png',
+                'assets/images/aclc_logo.png',
                 width: ResponsiveUtils.getResponsiveImageSize(
                   context,
                   mobile: 200,
@@ -255,7 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset(
-                'lib/images/aclc_logo.png',
+                'assets/images/aclc_logo.png',
                 width: ResponsiveUtils.getResponsiveImageSize(
                   context,
                   mobile: 200,
@@ -398,7 +403,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset(
-                      'images/aclc_logo.png',
+                      'assets/images/aclc_logo.png',
                     width: ResponsiveUtils.getResponsiveImageSize(
                       context,
                       mobile: 200,

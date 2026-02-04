@@ -1,6 +1,6 @@
 name: teacher_mobile
 description: "A new Flutter project."
-publish_to: 'none'
+publish_to: "none"
 
 version: 1.0.0+1
 
@@ -15,6 +15,7 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.2.2
   jwt_decoder: ^2.0.1
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -26,5 +27,5 @@ flutter:
   uses-material-design: true
 
   assets:
-     - lib/images/aclc_logo.png
-
+    - assets/images/aclc_logo.png
+    - assets/.env
