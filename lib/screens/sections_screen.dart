@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/responsive_utils.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import 'dashboard_screen.dart';
 import 'attendance_screen.dart';
 import 'qr_screen.dart';
@@ -33,25 +34,78 @@ class _SectionsScreenState extends State<SectionsScreen> {
       _errorMessage = null;
     });
 
-    final result = await _apiService.getInstructorSections();
+    try {
+      final instructorId = await StorageService.getInstructorId();
 
-    if (result['success']) {
+      if (instructorId == null) {
+        setState(() {
+          _errorMessage = 'Instructor ID not found. Please login again.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final result = await _apiService.getInstructorSchedules(instructorId);
+
+      if (result['success']) {
+        final List<dynamic> schedulesData = result['data'] as List<dynamic>;
+
+        // Group by section
+        Map<String, List<Map<String, dynamic>>> groupedSections = {};
+
+        for (var item in schedulesData) {
+          // Extract section info
+          var sectionData = item['section'];
+          String sectionName = sectionData?['name'] ?? 'Unknown';
+          int sectionId = sectionData?['id'] ?? 0;
+
+          // Initialize section if not exists
+          if (!groupedSections.containsKey(sectionName)) {
+            groupedSections[sectionName] = [];
+          }
+
+          // Extract subject info
+          var subjectData = item['subject'];
+          String subjectName = subjectData?['name'] ?? 'Unknown Subject';
+          String subjectCode = subjectData?['code'] ?? 'N/A';
+          int subjectId = subjectData?['id'] ?? 0;
+
+          final subjectItem = {
+            'sectionId': sectionId,
+            'sectionName': sectionName,
+            'subjectId': subjectId,
+            'name': subjectName, // Used in UI
+            'code': subjectCode,
+            'id': subjectId,
+          };
+
+          // Avoid duplicates if multiple schedules exist for same subject/section
+          // Check if this subject is already added to this section
+          bool exists = groupedSections[sectionName]!.any(
+            (s) => s['subjectId'] == subjectId,
+          );
+          if (!exists) {
+            groupedSections[sectionName]!.add(subjectItem);
+          }
+        }
+
+        setState(() {
+          _groupedSections = groupedSections;
+          // Initialize all programs as collapsed
+          _expandedPrograms = {
+            for (var program in _groupedSections.keys) program: false,
+          };
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['error'] ?? 'Failed to load sections';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
       setState(() {
-        _groupedSections = Map<String, List<Map<String, dynamic>>>.from(
-          result['data'].map((key, value) => MapEntry(
-            key,
-            List<Map<String, dynamic>>.from(value),
-          )),
-        );
-        // Initialize all programs as collapsed
-        _expandedPrograms = {
-          for (var program in _groupedSections.keys) program: false
-        };
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _errorMessage = result['error'] ?? 'Failed to load sections';
+        _errorMessage = 'Error loading sections: $e';
         _isLoading = false;
       });
     }
@@ -59,18 +113,24 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1E3A8A),
-              Color(0xFF3B82F6),
-              Color(0xFF60A5FA),
-            ],
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [
+                    const Color(0xFF1E3A8A),
+                    const Color(0xFF3B82F6),
+                    const Color(0xFF60A5FA),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -89,35 +149,26 @@ class _SectionsScreenState extends State<SectionsScreen> {
     return Column(
       children: [
         // Header
-        Padding(
-          padding: ResponsiveUtils.getResponsivePadding(context),
+        Container(
+          padding: const EdgeInsets.all(20),
           child: Row(
             children: [
               Image.asset(
                 'lib/images/aclc_logo.png',
-                width: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
-                height: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
+                width: 50,
+                height: 50,
                 fit: BoxFit.contain,
               ),
-              SizedBox(width: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 12, desktop: 16)),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'My Classes',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 20, tablet: 24, desktop: 28),
-                      ),
-                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
                 ),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.refresh,
-                  color: Colors.white,
-                  size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 24, tablet: 28, desktop: 32),
-                ),
-                onPressed: _loadSections,
               ),
             ],
           ),
@@ -145,12 +196,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
       children: [
         // Left sidebar
         Container(
-          width: ResponsiveUtils.getResponsiveSpacing(context, mobile: 0, tablet: 200, desktop: 250),
+          width: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 0,
+            tablet: 200,
+            desktop: 250,
+          ),
           decoration: const BoxDecoration(
             color: Color(0xFF1E3A8A),
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(25),
-            ),
+            borderRadius: BorderRadius.only(topRight: Radius.circular(25)),
           ),
           child: Column(
             children: [
@@ -159,20 +213,42 @@ class _SectionsScreenState extends State<SectionsScreen> {
                 child: Column(
                   children: [
                     Image.asset(
-                                     'lib/images/aclc_logo.png',
-
-                      width: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
-                      height: ResponsiveUtils.getResponsiveImageSize(context, mobile: 40, tablet: 50, desktop: 60),
+                      'lib/images/aclc_logo.png',
+                      width: ResponsiveUtils.getResponsiveImageSize(
+                        context,
+                        mobile: 40,
+                        tablet: 50,
+                        desktop: 60,
+                      ),
+                      height: ResponsiveUtils.getResponsiveImageSize(
+                        context,
+                        mobile: 40,
+                        tablet: 50,
+                        desktop: 60,
+                      ),
                       fit: BoxFit.contain,
                     ),
-                    SizedBox(height: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 12, desktop: 16)),
+                    SizedBox(
+                      height: ResponsiveUtils.getResponsiveSpacing(
+                        context,
+                        mobile: 8,
+                        tablet: 12,
+                        desktop: 16,
+                      ),
+                    ),
                     Text(
                       'My Classes',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 16, tablet: 18, desktop: 20),
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: ResponsiveUtils.getResponsiveFontSize(
+                              context,
+                              mobile: 16,
+                              tablet: 18,
+                              desktop: 20,
+                            ),
+                          ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -294,11 +370,12 @@ class _SectionsScreenState extends State<SectionsScreen> {
               ),
               child: Column(
                 children: [
-                  // Program Header
+                  // Program Header (Course Name: BSBA31C, BSCS31A, etc.)
                   ListTile(
                     title: Text(
                       programName,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF1E3A8A),
                             fontSize: ResponsiveUtils.getResponsiveFontSize(
@@ -330,10 +407,26 @@ class _SectionsScreenState extends State<SectionsScreen> {
                     },
                   ),
 
-                  // Sections List
+                  // Subjects List
                   if (isExpanded) ...[
                     const Divider(height: 1),
-                    ...sections.map((section) => _buildSectionCard(context, section)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: ResponsiveUtils.getResponsiveSpacing(
+                          context,
+                          mobile: 8,
+                          tablet: 10,
+                          desktop: 12,
+                        ),
+                      ),
+                      child: Column(
+                        children: sections
+                            .map(
+                              (section) => _buildSectionCard(context, section),
+                            )
+                            .toList(),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -345,24 +438,45 @@ class _SectionsScreenState extends State<SectionsScreen> {
   }
 
   Widget _buildSectionCard(BuildContext context, Map<String, dynamic> section) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Get icon and color based on subject name
     final iconData = _getSubjectIcon(section['name']);
     final color = _getSubjectColor(section['name']);
 
     return Container(
       margin: EdgeInsets.symmetric(
-        horizontal: ResponsiveUtils.getResponsiveSpacing(context, mobile: 12, tablet: 16, desktop: 20),
-        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 2, tablet: 4, desktop: 6),
+        horizontal: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 12,
+          tablet: 16,
+          desktop: 20,
+        ),
+        vertical: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 6,
+          tablet: 8,
+          desktop: 10,
+        ),
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: ListTile(
         leading: Container(
-          width: ResponsiveUtils.getResponsiveSpacing(context, mobile: 32, tablet: 40, desktop: 48),
-          height: ResponsiveUtils.getResponsiveSpacing(context, mobile: 32, tablet: 40, desktop: 48),
+          width: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 32,
+            tablet: 40,
+            desktop: 48,
+          ),
+          height: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 32,
+            tablet: 40,
+            desktop: 48,
+          ),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
@@ -370,69 +484,43 @@ class _SectionsScreenState extends State<SectionsScreen> {
           child: Icon(
             iconData,
             color: color,
-            size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 16, tablet: 20, desktop: 24),
+            size: ResponsiveUtils.getResponsiveSpacing(
+              context,
+              mobile: 16,
+              tablet: 20,
+              desktop: 24,
+            ),
           ),
         ),
         title: Text(
-          '${section['name']} - Section ${section['section']}',
+          section['name'], // Just the subject name (e.g., "Programming Language")
           style: TextStyle(
             fontWeight: FontWeight.w600,
             color: const Color(0xFF1E3A8A),
-            fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 14, tablet: 16, desktop: 18),
+            fontSize: ResponsiveUtils.getResponsiveFontSize(
+              context,
+              mobile: 14,
+              tablet: 16,
+              desktop: 18,
+            ),
           ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              section['code'],
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 10, tablet: 12, desktop: 14),
-              ),
-            ),
-            if (section['schedule'] != null && section['schedule'].toString().isNotEmpty)
-              Text(
-                section['schedule'],
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 9, tablet: 11, desktop: 13),
-                ),
-              ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E3A8A).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${section['studentCount']} students',
-                style: TextStyle(
-                  color: const Color(0xFF1E3A8A),
-                  fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 10, tablet: 12, desktop: 14),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.chevron_right,
-              color: const Color(0xFF1E3A8A),
-              size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 16, tablet: 20, desktop: 24),
-            ),
-          ],
+        trailing: Icon(
+          Icons.chevron_right,
+          color: const Color(0xFF1E3A8A),
+          size: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 16,
+            tablet: 20,
+            desktop: 24,
+          ),
         ),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => StudentsScreen(
                 sectionId: section['sectionId'],
-                subjectName: '${section['name']} - Section ${section['section']}',
+                subjectName: section['name'], // Just subject name
                 subjectCode: section['code'],
               ),
             ),
@@ -444,11 +532,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   IconData _getSubjectIcon(String subjectName) {
     final name = subjectName.toLowerCase();
-    if (name.contains('programming') || name.contains('code')) return Icons.code;
-    if (name.contains('data') || name.contains('structure')) return Icons.storage;
+    if (name.contains('programming') || name.contains('code'))
+      return Icons.code;
+    if (name.contains('data') || name.contains('structure'))
+      return Icons.storage;
     if (name.contains('math')) return Icons.calculate;
-    if (name.contains('computing') || name.contains('computer')) return Icons.computer;
-    if (name.contains('self') || name.contains('psychology')) return Icons.psychology;
+    if (name.contains('computing') || name.contains('computer'))
+      return Icons.computer;
+    if (name.contains('self') || name.contains('psychology'))
+      return Icons.psychology;
     if (name.contains('network')) return Icons.lan;
     if (name.contains('database')) return Icons.dns;
     if (name.contains('web')) return Icons.web;
@@ -457,11 +549,15 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   Color _getSubjectColor(String subjectName) {
     final name = subjectName.toLowerCase();
-    if (name.contains('programming') || name.contains('code')) return Colors.blue;
-    if (name.contains('data') || name.contains('structure')) return Colors.purple;
+    if (name.contains('programming') || name.contains('code'))
+      return Colors.blue;
+    if (name.contains('data') || name.contains('structure'))
+      return Colors.purple;
     if (name.contains('math')) return Colors.orange;
-    if (name.contains('computing') || name.contains('computer')) return Colors.red;
-    if (name.contains('self') || name.contains('psychology')) return Colors.green;
+    if (name.contains('computing') || name.contains('computer'))
+      return Colors.red;
+    if (name.contains('self') || name.contains('psychology'))
+      return Colors.green;
     if (name.contains('network')) return Colors.teal;
     if (name.contains('database')) return Colors.indigo;
     if (name.contains('web')) return Colors.pink;
@@ -480,12 +576,27 @@ class _SectionsScreenState extends State<SectionsScreen> {
     );
   }
 
-  Widget _buildSidebarItem(BuildContext context, IconData icon, String label, int index) {
+  Widget _buildSidebarItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    int index,
+  ) {
     final isSelected = index == 3;
     return Container(
       margin: EdgeInsets.symmetric(
-        horizontal: ResponsiveUtils.getResponsiveSpacing(context, mobile: 8, tablet: 12, desktop: 16),
-        vertical: ResponsiveUtils.getResponsiveSpacing(context, mobile: 4, tablet: 6, desktop: 8),
+        horizontal: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 8,
+          tablet: 12,
+          desktop: 16,
+        ),
+        vertical: ResponsiveUtils.getResponsiveSpacing(
+          context,
+          mobile: 4,
+          tablet: 6,
+          desktop: 8,
+        ),
       ),
       decoration: BoxDecoration(
         color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
@@ -495,13 +606,23 @@ class _SectionsScreenState extends State<SectionsScreen> {
         leading: Icon(
           icon,
           color: Colors.white,
-          size: ResponsiveUtils.getResponsiveSpacing(context, mobile: 20, tablet: 24, desktop: 28),
+          size: ResponsiveUtils.getResponsiveSpacing(
+            context,
+            mobile: 20,
+            tablet: 24,
+            desktop: 28,
+          ),
         ),
         title: Text(
           label,
           style: TextStyle(
             color: Colors.white,
-            fontSize: ResponsiveUtils.getResponsiveFontSize(context, mobile: 14, tablet: 16, desktop: 18),
+            fontSize: ResponsiveUtils.getResponsiveFontSize(
+              context,
+              mobile: 14,
+              tablet: 16,
+              desktop: 18,
+            ),
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -512,9 +633,11 @@ class _SectionsScreenState extends State<SectionsScreen> {
 
   Widget _buildResponsiveBottomNav(BuildContext context) {
     if (ResponsiveUtils.isMobile(context)) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -524,17 +647,26 @@ class _SectionsScreenState extends State<SectionsScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF1E3A8A),
-          unselectedItemColor: Colors.grey,
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          selectedItemColor: isDark ? Colors.white : const Color(0xFF1E3A8A),
+          unselectedItemColor: isDark ? Colors.grey[400] : Colors.grey,
           type: BottomNavigationBarType.fixed,
           currentIndex: 3,
+          selectedFontSize: 12,
+          unselectedFontSize: 12,
+          iconSize: 24,
           onTap: (index) => _handleNavigation(context, index),
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.assignment), label: 'Attendance'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.assignment),
+              label: 'Attendance',
+            ),
             BottomNavigationBarItem(icon: Icon(Icons.qr_code), label: 'QR'),
-            BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Sections'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.groups),
+              label: 'Sections',
+            ),
             BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
@@ -546,19 +678,27 @@ class _SectionsScreenState extends State<SectionsScreen> {
   void _handleNavigation(BuildContext context, int index) {
     switch (index) {
       case 0:
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const DashboardScreen()));
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
         break;
       case 1:
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AttendanceScreen()));
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const AttendanceScreen()),
+        );
         break;
       case 2:
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const QrScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (context) => QrScreen()));
         break;
       case 3:
         // Already on sections
         break;
       case 4:
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (context) => const ProfileScreen()));
         break;
     }
   }

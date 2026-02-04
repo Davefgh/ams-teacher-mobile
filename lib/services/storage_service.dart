@@ -1,23 +1,23 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class StorageService {
-  static late SharedPreferences _prefs;
+  static const _storage = FlutterSecureStorage();
 
   static Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    // No initialization needed for FlutterSecureStorage
   }
 
   static Future<void> saveTokens(String accessToken, String refreshToken) async {
-    await _prefs.setString('accessToken', accessToken);
-    await _prefs.setString('refreshToken', refreshToken);
+    await _storage.write(key: 'accessToken', value: accessToken);
+    await _storage.write(key: 'refreshToken', value: refreshToken);
   }
 
   static Future<void> saveInstructorId(String instructorId) async {
-    await _prefs.setString('instructorId', instructorId);
+    await _storage.write(key: 'instructorId', value: instructorId);
   }
 
   static Future<String?> getAccessToken() async {
-    return _prefs.getString('accessToken');
+    return await _storage.read(key: 'accessToken');
   }
 
   // Alias for getAccessToken() - used by ApiService
@@ -26,19 +26,25 @@ class StorageService {
   }
 
   static Future<String?> getRefreshToken() async {
-    return _prefs.getString('refreshToken');
+    return await _storage.read(key: 'refreshToken');
   }
 
   static Future<String?> getInstructorId() async {
-    return _prefs.getString('instructorId');
+    return await _storage.read(key: 'instructorId');
   }
 
   static Future<void> clearTokens() async {
-    await _prefs.remove('accessToken');
-    await _prefs.remove('refreshToken');
+    await _storage.delete(key: 'accessToken');
+    await _storage.delete(key: 'refreshToken');
   }
 
   static Future<void> clearAll() async {
-    await _prefs.clear();
+    await _storage.deleteAll();
+  }
+
+  // Check if user is authenticated
+  static Future<bool> isAuthenticated() async {
+    final token = await getAccessToken();
+    return token != null && token.isNotEmpty;
   }
 }
